@@ -120,7 +120,7 @@
     try {
       const [clinicsResult, doctorsResult, classesResult, payorsResult] = await Promise.all([
         supabase.from('clinics').select('clinic_id, name').eq('is_active', true).order('name'),
-        supabase.from('employees').select('employee_id, fullname').eq('is_dpjp', true).eq('is_active', true).order('fullname'),
+        supabase.from('employees').select('employee_id, full_name').eq('is_dpjp', true).eq('is_active', true).order('full_name'),
         supabase.from('room_classes').select('class_id, name').order('name'),
         supabase.from('payors').select('payor_id, name, type').eq('is_active', true).order('name')
       ]);
@@ -625,7 +625,7 @@
           <select id="doctor" bind:value={doctorId} class="select-field">
             <option value="">- Pilih Dokter -</option>
             {#each filteredDoctors as d}
-              <option value={d.employee_id}>{d.fullname}</option>
+              <option value={d.employee_id}>{d.full_name}</option>
             {/each}
           </select>
         </div>
@@ -715,7 +715,7 @@
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
           <div><p class="text-gray-500 text-xs">Jenis Kunjungan</p><p class="font-medium text-gray-900">{VISIT_TYPES[visitType]}</p></div>
           <div><p class="text-gray-500 text-xs">Poli</p><p class="font-medium text-gray-900">{clinics.find(c => c.clinic_id === clinicId)?.name || '-'}</p></div>
-          <div><p class="text-gray-500 text-xs">Dokter</p><p class="font-medium text-gray-900">{filteredDoctors.find(d => d.employee_id === doctorId)?.fullname || '-'}</p></div>
+          <div><p class="text-gray-500 text-xs">Dokter</p><p class="font-medium text-gray-900">{filteredDoctors.find(d => d.employee_id === doctorId)?.full_name || '-'}</p></div>
           <div><p class="text-gray-500 text-xs">Penanggung Biaya</p><p class="font-medium text-gray-900">{payors.find(p => p.payor_id === payorId)?.name || '-'}</p></div>
           {#if visitType === 'rawat_inap'}
             <div><p class="text-gray-500 text-xs">Kelas</p><p class="font-medium text-gray-900">{roomClasses.find(r => r.class_id === classId)?.name || '-'}</p></div>

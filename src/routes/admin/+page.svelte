@@ -696,7 +696,7 @@
                 {#each filteredEmployees as emp}
                   <tr class="hover:bg-gray-50 transition-colors">
                     <td class="table-cell font-mono text-xs text-gray-400">{emp.employee_id}</td>
-                    <td class="table-cell font-medium text-gray-900">{emp.fullname}</td>
+                    <td class="table-cell font-medium text-gray-900">{emp.full_name}</td>
                     <td class="table-cell">
                       <span class="badge {getRoleBadge(emp.role)}">{getRoleLabel(emp.role)}</span>
                     </td>

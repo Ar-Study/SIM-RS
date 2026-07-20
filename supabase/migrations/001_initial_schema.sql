@@ -429,7 +429,7 @@ CREATE TABLE public.surgery_bookings (
 -- ============================================
 CREATE TABLE public.discharge_summaries (
   id SERIAL PRIMARY KEY,
-  visit_id TEXT NOT NULL REFERENCES public.patient_visitations(visit_id) ON DELETE UNIQUE,
+  visit_id TEXT NOT NULL REFERENCES public.patient_visitations(visit_id) ,
   discharge_date TIMESTAMPTZ NOT NULL,
   discharge_condition TEXT CHECK (discharge_condition IN ('sembuh','berobat_jalan','rujuk','meninggal','lainnya')),
   final_diagnosis TEXT,

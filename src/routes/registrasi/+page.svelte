@@ -92,7 +92,7 @@
             nik
           ),
           clinics:clinic_id ( name ),
-          employees:doctor_id ( fullname ) 
+          employees:doctor_id ( full_name ) 
         `, { count: 'exact' });
 
       // *Catatan: Jika di database kolom foreign key Anda adalah employee_id (bukan doctor_id), 
@@ -125,14 +125,20 @@
 
       if (error) throw error;
 
-      registrations = (data || []).map(v => ({
-        ...v,
-        patient_name: v.patients?.full_name || '-',
-        patient_no: v.patients?.no_registration || '-',
-        patient_nik: v.patients?.nik || '-',
-        clinic_name: v.clinics?.name || '-',
-        doctor_name: v.employees?.fullname || '-' // REVISI: v.employees.fullname
-      }));
+      registrations = (data || []).map(v => {
+        const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
+        const clinic = Array.isArray(v.clinics) ? v.clinics[0] : v.clinics;
+        const doctor = Array.isArray(v.employees) ? v.employees[0] : v.employees;
+
+        return {
+          ...v,
+          patient_name: patient?.full_name || '-',
+          patient_no: patient?.no_registration || '-',
+          patient_nik: patient?.nik || '-',
+          clinic_name: clinic?.name || '-',
+          doctor_name: doctor?.full_name || '-'
+        };
+      });
 
       totalCount = count || 0;
     } catch (err) {
