@@ -89,8 +89,8 @@
       totalDischarges = dischargeData.length;
       totalPatientDays = dischargeData.reduce((sum, d) => {
         if (d.admission_date && d.discharge_date) {
-          const adm = new Date(d.admission_date);
-          const dis = new Date(d.discharge_date);
+          const adm = new Date(d.admission_date).getTime();
+          const dis = new Date(d.discharge_date).getTime();
           return sum + Math.max(1, Math.ceil((dis - adm) / (1000 * 60 * 60 * 24)));
         }
         return sum + 1;

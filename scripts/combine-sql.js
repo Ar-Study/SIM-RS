@@ -1,10 +1,12 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, readdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(__dirname, '..', 'supabase', 'migrations');
-const files = ['001_initial_schema.sql', '002_seed_data.sql', '003_rls_policies.sql'];
+const files = readdirSync(migrationsDir)
+  .filter((file) => file.endsWith('.sql') && file !== 'full_migration.sql')
+  .sort((a, b) => a.localeCompare(b));
 
 let fullSQL = `-- =============================================
 -- SIMRS FULL MIGRATION

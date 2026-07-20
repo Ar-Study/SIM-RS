@@ -562,6 +562,8 @@
         .from('radiology_orders')
         .insert({
           visit_id: visitId,
+          examination_type: examType,
+          clinical_info: description,
           exam_type: examType,
           description: description,
           status: 'ordered'

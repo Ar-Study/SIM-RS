@@ -373,7 +373,7 @@
               id="visit_type"
               class="select-field"
               value={form.visit_type}
-              onchange={(e) => handleVisitTypeChange(e.target.value)}
+              onchange={(e) => handleVisitTypeChange(e.currentTarget.value)}
             >
               <option value="rawat_jalan">Rawat Jalan</option>
               <option value="rawat_inap">Rawat Inap</option>
@@ -418,7 +418,7 @@
                 id="class_id"
                 class="select-field"
                 value={form.class_id}
-                onchange={(e) => handleClassChange(e.target.value)}
+                onchange={(e) => handleClassChange(e.currentTarget.value)}
               >
                 <option value="">- Pilih Kelas -</option>
                 {#each roomClasses as rc}
@@ -433,7 +433,7 @@
                 id="room_id"
                 class="select-field"
                 value={form.room_id}
-                onchange={(e) => handleRoomChange(e.target.value)}
+                onchange={(e) => handleRoomChange(e.currentTarget.value)}
                 disabled={!form.class_id}
               >
                 <option value="">- Pilih Kamar -</option>

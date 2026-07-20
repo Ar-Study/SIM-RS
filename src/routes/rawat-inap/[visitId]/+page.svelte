@@ -52,7 +52,7 @@
     if (!visit) return 0;
     const d = visit.admission_date || visit.visit_date;
     if (!d) return 0;
-    return Math.max(1, Math.floor((new Date() - new Date(d)) / (1000 * 60 * 60 * 24)) + 1);
+    return Math.max(1, Math.floor((new Date().getTime() - new Date(d).getTime()) / (1000 * 60 * 60 * 24)) + 1);
   });
 
   const billByType = $derived.by(() => {
@@ -297,7 +297,12 @@
   async function orderRadiology(examType, description) {
     try {
       const { error } = await supabase.from('radiology_orders').insert({
-        visit_id: visitId, exam_type: examType, description, status: 'ordered'
+        visit_id: visitId,
+        examination_type: examType,
+        clinical_info: description,
+        exam_type: examType,
+        description,
+        status: 'ordered'
       });
       if (error) throw error;
       await fetchRadiologyOrders();
@@ -778,8 +783,8 @@
                         <span class="text-sm text-gray-700 ml-2">{icd.name}</span>
                       </div>
                       <div class="flex gap-2">
-                        <button class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200" onclick={() => addDiagnosis(icd.code, icd.name, 'primer')}>Primer</button>
-                        <button class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200" onclick={() => addDiagnosis(icd.code, icd.name, 'sekunder')}>Sekunder</button>
+                        <button class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'primer')}>Primer</button>
+                        <button class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'sekunder')}>Sekunder</button>
                       </div>
                     </div>
                   {/each}

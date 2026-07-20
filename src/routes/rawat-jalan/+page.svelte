@@ -74,7 +74,7 @@
           doctor_id,
           patients:patient_id ( full_name, no_registration ),
           clinics:clinic_id ( name ),
-          employees:doctor_id ( fullname ) 
+          employees:doctor_id ( full_name ) 
         `)
         .eq('visit_type', 'rawat_jalan')
         .gte('visit_date', todayStart.toISOString())
@@ -84,13 +84,19 @@
       if (error) throw error;
 
       // REVISI: Sesuaikan pemetaan dengan perubahan nama kolom di atas
-      visits = (data || []).map(v => ({
-        ...v,
-        patient_name: v.patients?.full_name || '-',
-        patient_no: v.patients?.no_registration || '-',
-        clinic_name: v.clinics?.name || '-',
-        doctor_name: v.employees?.fullname || '-' 
-      }));
+      visits = (data || []).map(v => {
+        const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
+        const clinic = Array.isArray(v.clinics) ? v.clinics[0] : v.clinics;
+        const doctor = Array.isArray(v.employees) ? v.employees[0] : v.employees;
+
+        return {
+          ...v,
+          patient_name: patient?.full_name || '-',
+          patient_no: patient?.no_registration || '-',
+          clinic_name: clinic?.name || '-',
+          doctor_name: doctor?.full_name || '-'
+        };
+      });
     } catch (err) {
       console.error('Fetch visits error:', err);
     }
@@ -179,11 +185,13 @@
     await buildQueueBoard();
   }
 
-  onMount(async () => {
+  onMount(() => {
     loading = true;
-    await Promise.all([fetchVisits(), fetchClinics()]);
-    await buildQueueBoard();
-    loading = false;
+    (async () => {
+      await Promise.all([fetchVisits(), fetchClinics()]);
+      await buildQueueBoard();
+      loading = false;
+    })();
 
     timer = setInterval(() => {
       now = new Date();
@@ -201,6 +209,12 @@
 
 <svelte:head>
   <title>Rawat Jalan - Antrian Hari Ini</title>
+  <!-- <script
+  src="https://otakweb.com/widget/v1/widget.js"
+  data-token="wgt_03a8b9c22dd51138caee1fc495809415"
+  data-theme="light"
+  async
+></script> -->
 </svelte:head>
 
 <div class="space-y-6">

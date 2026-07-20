@@ -67,22 +67,30 @@
 
       if (fetchError) throw fetchError;
 
+      const patient = Array.isArray(data.patients) ? data.patients[0] : data.patients;
+      const clinic = Array.isArray(data.clinics) ? data.clinics[0] : data.clinics;
+      const doctor = Array.isArray(data.employees) ? data.employees[0] : data.employees;
+      const payor = Array.isArray(data.payors) ? data.payors[0] : data.payors;
+      const roomClass = Array.isArray(data.room_classes) ? data.room_classes[0] : data.room_classes;
+      const room = Array.isArray(data.rooms) ? data.rooms[0] : data.rooms;
+      const bed = Array.isArray(data.beds) ? data.beds[0] : data.beds;
+
       visit = {
         ...data,
-        patient_name: data.patients?.full_name || '-',
-        patient_no: data.patients?.no_registration || '-',
-        patient_nik: data.patients?.nik || '-',
-        patient_gender: data.patients?.gender || '-',
-        patient_dob: data.patients?.date_of_birth || null,
-        patient_phone: data.patients?.phone || '-',
-        patient_address: data.patients?.address || '-',
-        clinic_name: data.clinics?.name || '-',
-        doctor_name: data.employees?.full_name || '-',
-        payor_name: data.payors?.name || '-',
-        payor_type: data.payors?.type || '-',
-        class_name: data.room_classes?.name || '-',
-        room_number: data.rooms?.room_number || '-',
-        bed_number: data.beds?.bed_number || '-'
+        patient_name: patient?.full_name || '-',
+        patient_no: patient?.no_registration || '-',
+        patient_nik: patient?.nik || '-',
+        patient_gender: patient?.gender || '-',
+        patient_dob: patient?.date_of_birth || null,
+        patient_phone: patient?.phone || '-',
+        patient_address: patient?.address || '-',
+        clinic_name: clinic?.name || '-',
+        doctor_name: doctor?.full_name || '-',
+        payor_name: payor?.name || '-',
+        payor_type: payor?.type || '-',
+        class_name: roomClass?.name || '-',
+        room_number: room?.room_number || '-',
+        bed_number: bed?.bed_number || '-'
       };
     } catch (err) {
       console.error('Fetch visit detail error:', err);

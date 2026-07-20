@@ -97,10 +97,10 @@
           *,
           patients:patient_id ( patient_id, full_name, no_registration, date_of_birth, gender, phone, address ),
           clinics:clinic_id ( clinic_id, name ),
-          employees:doctor_id ( employee_id, fullname ) 
+          employees:doctor_id ( employee_id, full_name ) 
         `) // REVISI: Menggunakan tabel employees, employee_id, dan fullname
         .eq('visit_id', visitId)
-        .single();
+        .maybeSingle();
 
       if (visitErr) throw visitErr;
 
@@ -118,6 +118,31 @@
         const m = today.getMonth() - birth.getMonth();
         if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
         patient.age = age;
+      }
+
+      const { data: assessmentData, error: assessmentErr } = await supabase
+        .from('assessments')
+        .select('assessment_id, subjective, objective, sistolik, diastolik, suhu, nadi, rr, gcs, tb, bb, spo2')
+        .eq('visit_id', visitId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (assessmentErr) throw assessmentErr;
+
+      if (assessmentData) {
+        visit = { ...visitData, assessment_id: assessmentData.assessment_id };
+        assessment.subjective = assessmentData.subjective || '';
+        assessment.objective = assessmentData.objective || '';
+        assessment.sistolik = assessmentData.sistolik || '';
+        assessment.diastolik = assessmentData.diastolik || '';
+        assessment.suhu = assessmentData.suhu || '';
+        assessment.nadi = assessmentData.nadi || '';
+        assessment.rr = assessmentData.rr || '';
+        assessment.gcs = assessmentData.gcs || '';
+        assessment.tb = assessmentData.tb || '';
+        assessment.bb = assessmentData.bb || '';
+        assessment.spo2 = assessmentData.spo2 || '';
       }
     } catch (err) {
       console.error('Fetch visit error:', err);
@@ -143,11 +168,18 @@
     try {
       const { data, error } = await supabase
         .from('patient_diagnoses')
-        .select('*')
+        .select('id, visit_id, diagnosis_id, diagnosis_type, diagnoses:diagnosis_id ( code, name )')
         .eq('visit_id', visitId);
 
       if (error) throw error;
-      diagnoses = data || [];
+      diagnoses = (data || []).map((diag) => ({
+        id: diag.id,
+        visit_id: diag.visit_id,
+        diagnosis_id: diag.diagnosis_id,
+        diagnosis_type: diag.diagnosis_type,
+        icd_code: (Array.isArray(diag.diagnoses) ? diag.diagnoses[0] : diag.diagnoses)?.code || '-',
+        icd_name: (Array.isArray(diag.diagnoses) ? diag.diagnoses[0] : diag.diagnoses)?.name || '-'
+      }));
     } catch (err) {
       console.error('Fetch diagnoses error:', err);
     }
@@ -159,7 +191,7 @@
         .from('lab_orders')
         .select('*')
         .eq('visit_id', visitId)
-        .order('created_at', { ascending: false });
+        .order('created_by', { ascending: false });
 
       if (error) throw error;
       labOrders = data || [];
@@ -253,7 +285,7 @@
             spo2: assessment.spo2 ? Number(assessment.spo2) : null
           })
           .select()
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
         visit = { ...visit, assessment_id: data.assessment_id };
@@ -312,17 +344,13 @@
 
   async function addDiagnosis(diagnosisId, type = 'primer') {
     try {
-      // Validasi string input
       if (!diagnosisId) return;
 
-      // Antisipasi jika frontend mengirim kode mentah (misal: 'A09') 
-      // dan mengubahnya menjadi ID valid (misal: 'DX-A09')
       let validId = diagnosisId;
       if (!validId.startsWith('DX-')) {
         validId = `DX-${validId.toUpperCase()}`;
       }
 
-      // Cek apakah diagnosis ini sudah pernah ditambahkan di list UI saat ini
       const exists = diagnoses.find(d => d.diagnosis_id === validId);
       if (exists) return;
 
@@ -335,16 +363,26 @@
         });
 
       if (error) throw error;
-      
-      // Muat ulang list diagnosis pasien dari database
+
       await fetchDiagnoses();
-      
-      // Reset form pencarian
       diagnosisSearch = '';
       diagnosisResults = [];
     } catch (err) {
       console.error('Add diagnosis error:', err);
-      alert('Gagal menambahkan diagnosis: Pastikan kode ICD-10 terdaftar.');
+    }
+  }
+
+  async function removeDiagnosis(id) {
+    try {
+      const { error } = await supabase
+        .from('patient_diagnoses')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      await fetchDiagnoses();
+    } catch (err) {
+      console.error('Remove diagnosis error:', err);
     }
   }
   
@@ -417,7 +455,7 @@
     try {
       const { data, error } = await supabase
         .from('tariffs')
-        .select('tariff_id, name, tariff_type, price')
+        .select('tariff_id, name, price')
         .ilike('name', `%${tariffSearch}%`)
         .limit(10);
 
@@ -525,6 +563,8 @@
         .from('radiology_orders')
         .insert({
           visit_id: visitId,
+          examination_type: examType,
+          clinical_info: description,
           exam_type: examType,
           description: description,
           status: 'ordered'
@@ -690,11 +730,11 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div class="space-y-2">
-                <label class="label">Subyektif</label>
+                <p class="label">Subyektif</p>
                 <textarea class="input-field h-28 resize-none" bind:value={assessment.subjective} placeholder="Keluhan utama, riwayat penyakit sekarang..."></textarea>
               </div>
               <div class="space-y-2">
-                <label class="label">Obyektif</label>
+                <p class="label">Obyektif</p>
                 <textarea class="input-field h-28 resize-none" bind:value={assessment.objective} placeholder="Pemeriksaan fisik, temuan klinis..."></textarea>
               </div>
             </div>
@@ -703,39 +743,39 @@
               <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Tanda Vital</h4>
               <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                 <div class="space-y-1">
-                  <label class="label text-xs">Sistolik (mmHg)</label>
+                  <p class="label text-xs">Sistolik (mmHg)</p>
                   <input type="number" class="input-field" bind:value={assessment.sistolik} placeholder="120" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label text-xs">Diastolik (mmHg)</label>
+                  <p class="label text-xs">Diastolik (mmHg)</p>
                   <input type="number" class="input-field" bind:value={assessment.diastolik} placeholder="80" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label text-xs">Suhu (&deg;C)</label>
+                  <p class="label text-xs">Suhu (&deg;C)</p>
                   <input type="number" step="0.1" class="input-field" bind:value={assessment.suhu} placeholder="36.5" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label text-xs">Nadi (/mnt)</label>
+                  <p class="label text-xs">Nadi (/mnt)</p>
                   <input type="number" class="input-field" bind:value={assessment.nadi} placeholder="80" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label text-xs">RR (/mnt)</label>
+                  <p class="label text-xs">RR (/mnt)</p>
                   <input type="number" class="input-field" bind:value={assessment.rr} placeholder="20" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label text-xs">GCS</label>
+                  <p class="label text-xs">GCS</p>
                   <input type="number" class="input-field" bind:value={assessment.gcs} placeholder="15" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label text-xs">TB (cm)</label>
+                  <p class="label text-xs">TB (cm)</p>
                   <input type="number" step="0.1" class="input-field" bind:value={assessment.tb} placeholder="165" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label text-xs">BB (kg)</label>
+                  <p class="label text-xs">BB (kg)</p>
                   <input type="number" step="0.1" class="input-field" bind:value={assessment.bb} placeholder="65" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label text-xs">SpO2 (%)</label>
+                  <p class="label text-xs">SpO2 (%)</p>
                   <input type="number" class="input-field" bind:value={assessment.spo2} placeholder="98" />
                 </div>
               </div>
@@ -797,24 +837,24 @@
               <h4 class="text-sm font-semibold text-gray-700 mb-3">Tambah Catatan SOAP Baru</h4>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="space-y-1">
-                  <label class="label">Subyektif</label>
+                  <p class="label">Subyektif</p>
                   <textarea class="input-field h-24 resize-none text-sm" bind:value={newCppt.subyektif} placeholder="Keluhan pasien..."></textarea>
                 </div>
                 <div class="space-y-1">
-                  <label class="label">Obyektif</label>
+                  <p class="label">Obyektif</p>
                   <textarea class="input-field h-24 resize-none text-sm" bind:value={newCppt.obyektif} placeholder="Temuan pemeriksaan..."></textarea>
                 </div>
                 <div class="space-y-1">
-                  <label class="label">Assessment</label>
+                  <p class="label">Assessment</p>
                   <textarea class="input-field h-24 resize-none text-sm" bind:value={newCppt.assessment} placeholder="Diagnosis/penilaian..."></textarea>
                 </div>
                 <div class="space-y-1">
-                  <label class="label">Planning</label>
+                  <p class="label">Planning</p>
                   <textarea class="input-field h-24 resize-none text-sm" bind:value={newCppt.planning} placeholder="Rencana tindak lanjut..."></textarea>
                 </div>
               </div>
               <div class="space-y-1 mt-4">
-                <label class="label">Instruksi (opsional)</label>
+                <p class="label">Instruksi (opsional)</p>
                 <textarea class="input-field h-20 resize-none text-sm" bind:value={newCppt.instruksi} placeholder="Instruksi khusus untuk perawat/paramedis..."></textarea>
               </div>
               <div class="flex justify-end mt-4">
@@ -833,7 +873,7 @@
             <h3 class="text-lg font-semibold text-gray-900">Diagnosis (ICD-10)</h3>
 
             <div class="space-y-2">
-              <label class="label">Cari Kode ICD-10</label>
+              <p class="label">Cari Kode ICD-10</p>
               <div class="relative">
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -855,10 +895,10 @@
                         <span class="text-sm text-gray-700 ml-2">{icd.name}</span>
                       </div>
                       <div class="flex gap-2">
-                        <button class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200" onclick={() => addDiagnosis(icd.code, icd.name, 'primer')}>
+                        <button class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'primer')}>
                           Primer
                         </button>
-                        <button class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200" onclick={() => addDiagnosis(icd.code, icd.name, 'sekunder')}>
+                        <button class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'sekunder')}>
                           Sekunder
                         </button>
                       </div>
@@ -883,7 +923,7 @@
                           <span class="text-sm text-gray-600 ml-2">{diag.icd_name}</span>
                         </div>
                       </div>
-                      <button class="text-gray-400 hover:text-red-500 transition-colors" onclick={() => removeDiagnosis(diag.id)}>
+                      <button class="text-gray-400 hover:text-red-500 transition-colors" title="Hapus diagnosis" onclick={() => removeDiagnosis(diag.id)}>
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
@@ -902,7 +942,7 @@
             <h3 class="text-lg font-semibold text-gray-900">Laboratorium</h3>
 
             <div class="space-y-2">
-              <label class="label">Pesanan Tes Lab</label>
+              <p class="label">Pesanan Tes Lab</p>
               <div class="relative">
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -975,7 +1015,7 @@
             <h3 class="text-lg font-semibold text-gray-900">Radiologi</h3>
 
             <div class="space-y-2">
-              <label class="label">Pesan Pemeriksaan Radiologi</label>
+              <p class="label">Pesan Pemeriksaan Radiologi</p>
               <div class="relative">
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -1053,7 +1093,7 @@
               <h4 class="text-sm font-semibold text-gray-700">Tambah Resep</h4>
 
               <div class="space-y-2">
-                <label class="label">Cari Obat</label>
+                <p class="label">Cari Obat</p>
                 <div class="relative">
                   <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -1092,15 +1132,15 @@
 
               <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div class="space-y-1">
-                  <label class="label">Jumlah (Qty)</label>
+                  <p class="label">Jumlah (Qty)</p>
                   <input type="number" class="input-field" bind:value={newPrescription.qty} placeholder="10" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label">Dosis</label>
+                  <p class="label">Dosis</p>
                   <input type="text" class="input-field" bind:value={newPrescription.dosage} placeholder="500mg" />
                 </div>
                 <div class="space-y-1">
-                  <label class="label">Frekuensi</label>
+                  <p class="label">Frekuensi</p>
                   <select class="select-field" bind:value={newPrescription.frequency}>
                     <option value="">Pilih...</option>
                     <option value="1x1">1x1 sehari</option>
@@ -1112,7 +1152,7 @@
                   </select>
                 </div>
                 <div class="space-y-1">
-                  <label class="label">Instruksi</label>
+                  <p class="label">Instruksi</p>
                   <input type="text" class="input-field" bind:value={newPrescription.instruction} placeholder="Setelah makan" />
                 </div>
               </div>
@@ -1153,7 +1193,7 @@
                           <td class="table-cell text-gray-600 hidden md:table-cell">{rx.frequency || '-'}</td>
                           <td class="table-cell text-gray-600 hidden lg:table-cell">{rx.instruction || '-'}</td>
                           <td class="table-cell text-right">
-                            <button class="text-gray-400 hover:text-red-500 transition-colors" onclick={() => removePrescription(rx.id)}>
+                            <button class="text-gray-400 hover:text-red-500 transition-colors" title="Hapus resep" onclick={() => removePrescription(rx.id)}>
                               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                               </svg>
@@ -1175,7 +1215,7 @@
             <h3 class="text-lg font-semibold text-gray-900">Billing / Tarif</h3>
 
             <div class="space-y-2">
-              <label class="label">Tambah dari Daftar Tarif</label>
+              <p class="label">Tambah dari Daftar Tarif</p>
               <div class="relative">
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
@@ -1210,16 +1250,16 @@
               <h4 class="text-sm font-semibold text-gray-700">Tambah Biaya Manual</h4>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="space-y-1 md:col-span-2">
-                  <label class="label">Deskripsi</label>
+                  <p class="label">Deskripsi</p>
                   <input type="text" class="input-field" bind:value={newBill.description} placeholder="Deskripsi biaya..." />
                 </div>
                 <div class="space-y-1">
-                  <label class="label">Jumlah (Rp)</label>
+                  <p class="label">Jumlah (Rp)</p>
                   <input type="number" class="input-field" bind:value={newBill.amount} placeholder="0" />
                 </div>
               </div>
               <div class="space-y-1">
-                <label class="label">Tipe Tarif</label>
+                <p class="label">Tipe Tarif</p>
                 <select class="select-field" bind:value={newBill.tariff_type}>
                   <option value="Konsultasi">Konsultasi</option>
                   <option value="Tindakan">Tindakan</option>
@@ -1266,7 +1306,7 @@
                           </td>
                           <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency(bill.amount)}</td>
                           <td class="table-cell text-right">
-                            <button class="text-gray-400 hover:text-red-500 transition-colors" onclick={() => removeBill(bill.id)}>
+                            <button class="text-gray-400 hover:text-red-500 transition-colors" title="Hapus tagihan" onclick={() => removeBill(bill.id)}>
                               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                               </svg>

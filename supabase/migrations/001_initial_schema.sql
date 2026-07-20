@@ -246,7 +246,7 @@ CREATE TABLE public.patient_diagnoses (
   id SERIAL PRIMARY KEY,
   visit_id TEXT NOT NULL REFERENCES public.patient_visitations(visit_id) ON DELETE CASCADE,
   diagnosis_id TEXT NOT NULL REFERENCES public.diagnoses(diagnosis_id),
-  diagnosis_type TEXT DEFAULT 'primer' CHECK (diagnosis_type IN ('primer','sekunder')),
+  diagnosis_type TEXT DEFAULT 'primer',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
