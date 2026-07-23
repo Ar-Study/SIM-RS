@@ -455,7 +455,7 @@
     try {
       const { data, error } = await supabase
         .from('tariffs')
-        .select('tariff_id, name, price')
+        .select('tariff_id, name, category, price')
         .ilike('name', `%${tariffSearch}%`)
         .limit(10);
 
@@ -472,9 +472,9 @@
         .from('treatment_bills')
         .insert({
           visit_id: visitId,
-          tariff_id : tariff.tariff_id,
+          tariff_id: tariff.tariff_id,
           description: tariff.name,
-          tariff_type: tariff.tariff_type,
+          tariff_type: tariff.category,
           amount: tariff.price
         });
 
@@ -1235,7 +1235,7 @@
                     <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
                       <div>
                         <span class="text-sm font-medium text-gray-900">{tariff.name}</span>
-                        <span class="badge badge-gray ml-2">{tariff.tariff_type}</span>
+                        <span class="badge badge-gray ml-2">{tariff.category}</span>
                         <span class="text-sm font-semibold text-emerald-600 ml-2">{formatCurrency(tariff.price)}</span>
                       </div>
                       <button class="btn-success btn-sm text-xs" onclick={() => addBill(tariff)}>

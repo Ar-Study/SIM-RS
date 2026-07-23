@@ -354,7 +354,7 @@
     if (tariffSearch.length < 2) { tariffResults = []; return; }
     try {
       const { data, error } = await supabase.from('tariffs')
-        .select('tariff_id, name, tariff_type, price').ilike('name', `%${tariffSearch}%`).limit(10);
+        .select('tariff_id, name, category, price').ilike('name', `%${tariffSearch}%`).limit(10);
       if (error) throw error;
       tariffResults = data || [];
     } catch (err) { console.error('Search tariffs error:', err); }
@@ -363,7 +363,7 @@
   async function addBill(tariff) {
     try {
       const { error } = await supabase.from('treatment_bills').insert({
-        visit_id: visitId, description: tariff.name, tariff_type: tariff.tariff_type, amount: tariff.price
+        visit_id: visitId, tariff_id: tariff.tariff_id, description: tariff.name, tariff_type: tariff.category, amount: tariff.price
       });
       if (error) throw error;
       tariffSearch = '';
@@ -1047,7 +1047,7 @@
                     <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
                       <div>
                         <span class="text-sm font-medium text-gray-900">{tariff.name}</span>
-                        <span class="badge badge-gray ml-2">{tariff.tariff_type}</span>
+                        <span class="badge badge-gray ml-2">{tariff.category}</span>
                         <span class="text-sm font-semibold text-emerald-600 ml-2">{formatCurrency(tariff.price)}</span>
                       </div>
                       <button class="btn-success btn-sm text-xs" onclick={() => addBill(tariff)}>Tambah</button>
