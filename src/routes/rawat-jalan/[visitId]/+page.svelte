@@ -472,6 +472,7 @@
         .from('treatment_bills')
         .insert({
           visit_id: visitId,
+          tariff_id : tariff.tariff_id,
           description: tariff.name,
           tariff_type: tariff.tariff_type,
           amount: tariff.price
