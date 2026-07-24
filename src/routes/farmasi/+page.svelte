@@ -38,6 +38,7 @@
       const today = new Date();
       return d.toDateString() === today.toDateString();
     }).length,
+    
     todaySales: sales.filter(s => {
       const d = new Date(s.created_at);
       const today = new Date();
