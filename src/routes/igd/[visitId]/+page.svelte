@@ -142,7 +142,7 @@
         .select(`
           *,
           patients:patient_id ( patient_id, full_name, no_registration, date_of_birth, gender, phone, address ),
-          doctors:doctor_id ( doctor_id, full_name )
+          doctors:doctor_id ( employee_id, full_name )
         `)
         .eq('visit_id', visitId)
         .single();
@@ -243,7 +243,7 @@
         .from('lab_orders')
         .select('*')
         .eq('visit_id', visitId)
-        .order('created_at', { ascending: false });
+        .order('order_date', { ascending: false });
       if (error) throw error;
       labOrders = data || [];
     } catch (err) {
@@ -297,11 +297,15 @@
     try {
       const { data, error } = await supabase
         .from('rooms')
-        .select('room_id, name, room_type, beds:beds(bed_id, bed_number, is_available)')
+        .select('room_id, room_number, room_classes:class_id ( name )')
         .eq('is_active', true)
-        .order('name');
+        .order('room_number');
       if (error) throw error;
-      rooms = data || [];
+      rooms = (data || []).map(r => ({
+        room_id: r.room_id,
+        name: r.room_number,
+        room_type: Array.isArray(r.room_classes) ? r.room_classes[0]?.name : r.room_classes?.name || '-'
+      }));
     } catch (err) {
       console.error('Fetch rooms error:', err);
     }
@@ -448,8 +452,7 @@
       const { error } = await supabase
         .from('patient_diagnoses')
         .delete()
-        const { data, error } = await supabase.from('diagnoses').select('diagnosis_id, code, name')
-          .eq('is_active', true)
+        .eq('id', id);
       if (error) throw error;
       await fetchDiagnoses();
     } catch (err) {
@@ -457,13 +460,11 @@
     }
   }
 
-  async function addDiagnosis(diagnosisId, type = 'primer') {
+  async function saveTindakan() {
     if (!newTindakan.procedure_name.trim()) return;
-      if (diagnoses.find(d => d.diagnosis_id === diagnosisId)) return;
+    saving = true;
     try {
-        visit_id: visitId,
-        diagnosis_id: diagnosisId,
-        diagnosis_type: type
+      const { error } = await supabase
         .from('tindakan')
         .insert({
           visit_id: visitId,
@@ -1072,10 +1073,10 @@
                         <span class="text-sm text-gray-700 ml-2">{icd.name}</span>
                       </div>
                       <div class="flex gap-2">
-                        <button class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200" onclick={() => addDiagnosis(icd.code, icd.name, 'primer')}>
+                        <button class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'primer')}>
                           Primer
                         </button>
-                        <button class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200" onclick={() => addDiagnosis(icd.code, icd.name, 'sekunder')}>
+                        <button class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'sekunder')}>
                           Sekunder
                         </button>
                       </div>

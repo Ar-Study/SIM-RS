@@ -50,7 +50,7 @@
 
   const daysStayed = $derived.by(() => {
     if (!visit) return 0;
-    const d = visit.admission_date || visit.visit_date;
+    const d = visit.in_date || visit.visit_date;
     if (!d) return 0;
     return Math.max(1, Math.floor((new Date().getTime() - new Date(d).getTime()) / (1000 * 60 * 60 * 24)) + 1);
   });
@@ -86,12 +86,10 @@
         .from('patient_visitations')
         .select(`
           *,
-          admission_date:in_date,
-          discharge_date:exit_date,
           patients:patient_id ( patient_id, full_name, no_registration, date_of_birth, gender, phone, address ),
           rooms:room_id ( room_id, room_number, room_classes:class_id ( name ) ),
           beds:bed_id ( bed_id, bed_number ),
-          doctors:doctor_id ( doctor_id, full_name )
+          doctors:doctor_id ( employee_id, full_name )
         `)
         .eq('visit_id', visitId)
         .single();
@@ -116,6 +114,21 @@
         if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
         patient.age = age;
       }
+
+      if (visit?.exit_date) {
+        const { data: dischargeData } = await supabase
+          .from('discharge_summaries')
+          .select('*')
+          .eq('visit_id', visitId)
+          .maybeSingle();
+        if (dischargeData) {
+          visit.discharge_condition = dischargeData.discharge_condition;
+          visit.final_diagnosis = dischargeData.final_diagnosis;
+          visit.treatment_summary = dischargeData.treatment_summary;
+          visit.discharge_medications = dischargeData.medication_on_discharge;
+          visit.discharge_notes = dischargeData.follow_up_notes;
+        }
+      }
     } catch (err) {
       console.error('Fetch visit error:', err);
     }
@@ -133,16 +146,25 @@
   async function fetchDiagnoses() {
     try {
       const { data, error } = await supabase
-        .from('patient_diagnoses').select('*').eq('visit_id', visitId);
+        .from('patient_diagnoses')
+        .select('id, visit_id, diagnosis_id, diagnosis_type, diagnoses:diagnosis_id ( code, name )')
+        .eq('visit_id', visitId);
       if (error) throw error;
-      diagnoses = data || [];
+      diagnoses = (data || []).map(d => ({
+        id: d.id,
+        visit_id: d.visit_id,
+        diagnosis_id: d.diagnosis_id,
+        diagnosis_type: d.diagnosis_type,
+        icd_code: (Array.isArray(d.diagnoses) ? d.diagnoses[0] : d.diagnoses)?.code || '-',
+        icd_name: (Array.isArray(d.diagnoses) ? d.diagnoses[0] : d.diagnoses)?.name || '-'
+      }));
     } catch (err) { console.error('Fetch diagnoses error:', err); }
   }
 
   async function fetchLabOrders() {
     try {
       const { data, error } = await supabase
-        .from('lab_orders').select('*').eq('visit_id', visitId).order('created_at', { ascending: false });
+        .from('lab_orders').select('*').eq('visit_id', visitId).order('order_date', { ascending: false });
       if (error) throw error;
       labOrders = data || [];
     } catch (err) { console.error('Fetch lab orders error:', err); }
@@ -196,9 +218,21 @@
   async function fetchRoomTransfers() {
     try {
       const { data, error } = await supabase
-        .from('room_transfers').select('*').eq('visit_id', visitId).order('transfer_date', { ascending: false });
+        .from('room_transfers')
+        .select(`
+          *,
+          from_room:from_room_id ( room_number ),
+          to_room:to_room_id ( room_number )
+        `)
+        .eq('visit_id', visitId)
+        .order('transfer_date', { ascending: false });
       if (error) throw error;
-      roomTransfers = data || [];
+      roomTransfers = (data || []).map(tf => ({
+        ...tf,
+        from_room_name: tf.from_room?.room_number || '-',
+        to_room_name: tf.to_room?.room_number || '-',
+        transfer_date: tf.transfer_date
+      }));
     } catch (err) { console.error('Fetch room transfers error:', err); }
   }
 
@@ -223,7 +257,7 @@
     if (!roomId) { availableBeds = []; return; }
     try {
       const { data, error } = await supabase
-        .from('beds').select('*').eq('room_id', roomId).eq('status', 'empty').order('bed_number');
+        .from('beds').select('*').eq('room_id', roomId).eq('is_occupied', false).order('bed_number');
       if (error) throw error;
       availableBeds = (data || []).map(bed => ({
         ...bed,
@@ -383,7 +417,7 @@
   async function addBill(tariff) {
     try {
       const { error } = await supabase.from('treatment_bills').insert({
-        visit_id: visitId, tariff_id: tariff.tariff_id, description: tariff.name, tariff_type: tariff.category, amount: tariff.price
+        visit_id: visitId, tariff_id: tariff.tariff_id, description: tariff.name, tariff_type: tariff.category, unit_price: tariff.price, amount: tariff.price
       });
       if (error) throw error;
       tariffSearch = '';
@@ -464,10 +498,10 @@
       if (error) throw error;
 
       if (visit?.bed_id) {
-        await supabase.from('beds').update({ status: 'empty' }).eq('bed_id', visit.bed_id);
+        await supabase.from('beds').update({ is_occupied: false }).eq('bed_id', visit.bed_id);
       }
       if (newTransfer.to_bed_id) {
-        await supabase.from('beds').update({ status: 'occupied' }).eq('bed_id', newTransfer.to_bed_id);
+        await supabase.from('beds').update({ is_occupied: true }).eq('bed_id', newTransfer.to_bed_id);
         await supabase.from('patient_visitations').update({
           room_id: newTransfer.to_room_id, bed_id: newTransfer.to_bed_id
         }).eq('visit_id', visitId);
@@ -487,21 +521,30 @@
     if (!dischargeForm.final_diagnosis.trim()) return;
     saving = true;
     try {
-      const { error } = await supabase.from('patient_visitations').update({
+      await supabase.from('patient_visitations').update({
         exit_date: new Date().toISOString(),
+        status_periksa: 'selesai',
+        status_keluar: dischargeForm.condition
+      }).eq('visit_id', visitId);
+
+      const { error } = await supabase.from('discharge_summaries').insert({
+        visit_id: visitId,
+        discharge_date: new Date().toISOString(),
         discharge_condition: dischargeForm.condition,
         final_diagnosis: dischargeForm.final_diagnosis,
         treatment_summary: dischargeForm.treatment_summary,
-        discharge_medications: dischargeForm.discharge_medications,
-        discharge_notes: dischargeForm.notes
-      }).eq('visit_id', visitId);
+        medication_on_discharge: dischargeForm.discharge_medications,
+        follow_up_notes: dischargeForm.notes
+      });
       if (error) throw error;
 
       if (visit?.bed_id) {
-        await supabase.from('beds').update({ status: 'empty' }).eq('bed_id', visit.bed_id);
+        await supabase.from('beds').update({ is_occupied: false }).eq('bed_id', visit.bed_id);
       }
 
       await fetchVisitData();
+      alert('Pasien berhasil dipulangkan');
+      goto('/rawat-inap');
     } catch (err) { console.error('Discharge error:', err); }
     finally { saving = false; }
   }
@@ -559,7 +602,7 @@
         Kembali
       </button>
       <h1 class="text-xl font-bold text-gray-900">Rawat Inap - Detail Pasien</h1>
-      {#if visit.discharge_date}
+      {#if visit.exit_date}
         <span class="badge badge-info">Sudah Pulang</span>
       {:else}
         <span class="badge badge-success">Sedang Dirawat</span>
@@ -588,7 +631,7 @@
           </div>
           <div class="bg-white rounded-lg px-4 py-2 border border-gray-200">
             <p class="text-xs text-gray-500">Bed</p>
-            <p class="font-semibold text-gray-900">{bed?.bed_no || '-'}</p>
+            <p class="font-semibold text-gray-900">{bed?.bed_number || '-'}</p>
           </div>
           <div class="bg-white rounded-lg px-4 py-2 border border-gray-200">
             <p class="text-xs text-gray-500">Kelas</p>
@@ -661,11 +704,11 @@
               <div class="space-y-3">
                 <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Informasi Perawatan</h4>
                 <div class="bg-gray-50 rounded-lg p-4 space-y-2">
-                  <div class="flex justify-between"><span class="text-sm text-gray-500">Tgl Masuk</span><span class="text-sm font-semibold text-gray-900">{formatDate(visit?.admission_date || visit?.visit_date)}</span></div>
+                  <div class="flex justify-between"><span class="text-sm text-gray-500">Tgl Masuk</span><span class="text-sm font-semibold text-gray-900">{formatDate(visit?.in_date || visit?.visit_date)}</span></div>
                   <div class="flex justify-between"><span class="text-sm text-gray-500">Hari ke-</span><span class="text-sm font-bold text-primary-600">{daysStayed} hari</span></div>
                   <div class="flex justify-between"><span class="text-sm text-gray-500">Kamar</span><span class="text-sm font-semibold text-gray-900">{room?.name || '-'}</span></div>
                   <div class="flex justify-between"><span class="text-sm text-gray-500">Kelas</span><span class="text-sm font-semibold text-gray-900">{room?.class || '-'}</span></div>
-                  <div class="flex justify-between"><span class="text-sm text-gray-500">Bed</span><span class="text-sm font-semibold text-gray-900">{bed?.bed_no || '-'}</span></div>
+                  <div class="flex justify-between"><span class="text-sm text-gray-500">Bed</span><span class="text-sm font-semibold text-gray-900">{bed?.bed_number || '-'}</span></div>
                   <div class="flex justify-between"><span class="text-sm text-gray-500">Dokter</span><span class="text-sm font-semibold text-gray-900">{doctor?.full_name || '-'}</span></div>
                   <div class="flex justify-between"><span class="text-sm text-gray-500">Tipe Bayar</span><span class="text-sm font-semibold text-gray-900">{PAYOR_TYPES[visit?.payor_type] || '-'}</span></div>
                 </div>
@@ -687,12 +730,12 @@
               </div>
             </div>
 
-            {#if visit?.discharge_date}
+            {#if visit?.exit_date}
               <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
                 <h4 class="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-3">Informasi Pulang</h4>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div class="space-y-2">
-                    <div class="flex justify-between"><span class="text-sm text-gray-500">Tgl Pulang</span><span class="text-sm font-semibold text-gray-900">{formatDateTime(visit.discharge_date)}</span></div>
+                    <div class="flex justify-between"><span class="text-sm text-gray-500">Tgl Pulang</span><span class="text-sm font-semibold text-gray-900">{formatDateTime(visit.exit_date)}</span></div>
                     <div class="flex justify-between"><span class="text-sm text-gray-500">Kondisi</span><span class="text-sm font-semibold text-gray-900">{DISCHARGE_CONDITIONS[visit.discharge_condition] || visit.discharge_condition || '-'}</span></div>
                     <div class="flex justify-between"><span class="text-sm text-gray-500">Diagnosis Akhir</span><span class="text-sm font-semibold text-gray-900">{visit.final_diagnosis || '-'}</span></div>
                   </div>
@@ -1277,7 +1320,7 @@
           <div class="space-y-6">
             <h3 class="text-lg font-semibold text-gray-900">Mutasi / Pindah Kamar</h3>
 
-            {#if !visit.discharge_date}
+            {#if !visit.exit_date}
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
                 <h4 class="text-sm font-semibold text-gray-700">Pindah Kamar</h4>
                 <div class="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
@@ -1355,7 +1398,7 @@
           <div class="space-y-6">
             <h3 class="text-lg font-semibold text-gray-900">Formulir Pulang (Discharge)</h3>
 
-            {#if visit.discharge_date}
+            {#if visit.exit_date}
               <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
                 <div class="flex items-center gap-2 mb-3">
                   <svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1364,7 +1407,7 @@
                   <h4 class="font-semibold text-blue-800">Pasien Sudah Pulang</h4>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div><span class="text-blue-600">Tgl Pulang:</span> <strong>{formatDateTime(visit.discharge_date)}</strong></div>
+                  <div><span class="text-blue-600">Tgl Pulang:</span> <strong>{formatDateTime(visit.exit_date)}</strong></div>
                   <div><span class="text-blue-600">Kondisi:</span> <strong>{DISCHARGE_CONDITIONS[visit.discharge_condition] || '-'}</strong></div>
                   <div class="md:col-span-2"><span class="text-blue-600">Diagnosis Akhir:</span> <strong>{visit.final_diagnosis || '-'}</strong></div>
                   <div class="md:col-span-2"><span class="text-blue-600">Ringkasan:</span> <p class="mt-1">{visit.treatment_summary || '-'}</p></div>
@@ -1386,7 +1429,7 @@
                   <div class="space-y-1">
                     <label class="label">Kondisi Pulang</label>
                     <select class="select-field" bind:value={dischargeForm.condition}>
-                      <option value="semuh">Sembuh</option>
+                      <option value="sembuh">Sembuh</option>
                       <option value="berobat_jalan">Berobat Jalan</option>
                       <option value="rujuk">Rujuk</option>
                       <option value="meninggal">Meninggal</option>

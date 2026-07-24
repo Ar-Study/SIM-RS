@@ -79,7 +79,7 @@
           )
         `)
         .eq('status', 'selesai')
-        .order('updated_at', { ascending: false });
+        .order('completed_at', { ascending: false });
       if (error) throw error;
       completedOrders = (data || []).map(o => ({
         ...o,
@@ -546,7 +546,7 @@
                         </div>
                       </td>
                       <td class="table-cell text-gray-600 hidden lg:table-cell">{order.doctor_name}</td>
-                      <td class="table-cell text-gray-500 hidden lg:table-cell text-xs">{formatDateTime(order.updated_at)}</td>
+                      <td class="table-cell text-gray-500 hidden lg:table-cell text-xs">{formatDateTime(order.completed_at)}</td>
                       <td class="table-cell text-center">
                         <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-100 text-sm font-semibold text-emerald-700">
                           {itemCount || '-'}
