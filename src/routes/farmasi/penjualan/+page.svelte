@@ -171,10 +171,9 @@
             .from('drug_stock_logs')
             .insert({
               drug_id: item.drug_id,
-              change_type: 'sale',
+              change_type: 'out',
               quantity: -item.qty,
-              previous_stock: drug.stock,
-              new_stock: Math.max(0, newStock),
+              reference: `sale-${saleData.id}`,
               notes: `Penjualan FS-${saleData.id} - ${buyerName}`
             });
         }

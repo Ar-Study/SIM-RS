@@ -50,6 +50,9 @@
     if (activeTab === 'resep') {
       result = result.filter(p => p.status === 'pending');
     }
+    if (activeTab === 'resep_done') {
+      result = result.filter(p => p.status === 'dispensed');
+    }
     return result;
   });
 
@@ -290,17 +293,18 @@
     </div>
 
     <div class="p-6">
-      {#if activeTab === 'resep'}
+      {#if activeTab === 'resep' || activeTab === 'resep_done'}
         <div class="space-y-4">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-semibold text-gray-900">Resep Masuk</h3>
             <div class="flex gap-2">
               <select class="select-field text-sm w-auto" bind:value={activeTab}>
                 <option value="resep">Menunggu</option>
+                <option value="resep_done">Selesai</option>
               </select>
             </div>
           </div>
-
+                  
           {#if loading}
             <div class="flex items-center justify-center py-16">
               <div class="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>

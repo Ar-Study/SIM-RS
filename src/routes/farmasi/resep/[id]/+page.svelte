@@ -94,7 +94,7 @@
 
       for (const rx of undispensed) {
         const newStock = (rx.drugs?.stock || 0) - (rx.qty || 0);
-
+        // console.log("visit_id", rx.visit_id);
         const { error: rxError } = await supabase
           .from('prescriptions')
           .update({
@@ -102,7 +102,7 @@
             dispensed_at: now,
             dispensed_notes: notes
           })
-          .eq('id', rx.id);
+          .eq('visit_id', rx.visit_id);
 
         if (rxError) throw rxError;
 
@@ -118,10 +118,9 @@
             .from('drug_stock_logs')
             .insert({
               drug_id: rx.drug_id,
-              change_type: 'dispense',
+              change_type: 'out',
               quantity: -(rx.qty || 0),
-              previous_stock: rx.drugs.stock,
-              new_stock: Math.max(0, newStock),
+              reference: `resep-${visitId}`,
               notes: `Resep ${visitId} - ${patient?.full_name || '-'}`
             });
 
