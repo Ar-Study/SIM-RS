@@ -101,6 +101,8 @@
 
       visits = (data || []).map(v => ({
         ...v,
+        admission_date: v.in_date,
+        discharge_date: v.exit_date,
         clinic_name: v.clinics?.name || '-',
         doctor_name: v.doctors?.full_name || '-'
       }));

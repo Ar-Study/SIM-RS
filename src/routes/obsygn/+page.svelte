@@ -109,7 +109,7 @@
           doctors:doctor_id ( full_name )
         `)
         .eq('visit_type', 'rawat_jalan')
-        .is('discharge_date', null)
+        .is('exit_date', null)
         .order('visit_date', { ascending: false });
       if (error) throw error;
 

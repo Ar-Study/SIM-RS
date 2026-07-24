@@ -66,10 +66,10 @@
           .lte('visit_date', lastDay.toISOString()),
         supabase
           .from('patient_visitations')
-          .select('visit_id, admission_date, discharge_date, visit_date')
+          .select('visit_id, admission_date:in_date, discharge_date:exit_date, visit_date')
           .eq('status_keluar', '1')
-          .gte('discharge_date', firstDay.toISOString())
-          .lte('discharge_date', lastDay.toISOString()),
+          .gte('exit_date', firstDay.toISOString())
+          .lte('exit_date', lastDay.toISOString()),
         supabase
           .from('billing_invoices')
           .select('net_amount, paid_at, status')
@@ -209,7 +209,7 @@
       } else if (rlType === '3.2') {
         const { data } = await supabase
           .from('patient_visitations')
-          .select('visit_id, visit_date, status_keluar, diagnosis_masuk, clinics:clinic_id(name), rooms:room_id(name, room_classes:class_id(name))')
+          .select('visit_id, visit_date, status_keluar, diagnosis_masuk, clinics:clinic_id(name), rooms:room_id(room_number, room_classes:class_id(name))')
           .eq('visit_type', 'rawat_inap')
           .gte('visit_date', from.toISOString())
           .lte('visit_date', to.toISOString());
@@ -217,8 +217,8 @@
         rlReport = (data || []).map(v => ({
           visit_id: v.visit_id,
           clinic: v.clinics?.name || '-',
-          room: v.rooms?.name || '-',
-          kelas: v.rooms?.room_classes?.name || '-',
+          room: v.rooms?.room_number || '-',
+          kelas: (Array.isArray(v.rooms?.room_classes) ? v.rooms.room_classes[0] : v.rooms?.room_classes)?.name || '-',
           diagnosis: v.diagnosis_masuk || '-',
           status: v.status_keluar === '1' ? 'Keluar' : 'Masih Dirawat'
         }));

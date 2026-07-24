@@ -86,9 +86,11 @@
         .from('patient_visitations')
         .select(`
           *,
+          admission_date:in_date,
+          discharge_date:exit_date,
           patients:patient_id ( patient_id, full_name, no_registration, date_of_birth, gender, phone, address ),
-          rooms:room_id ( room_id, name, class ),
-          beds:bed_id ( bed_id, bed_no ),
+          rooms:room_id ( room_id, room_number, room_classes:class_id ( name ) ),
+          beds:bed_id ( bed_id, bed_number ),
           doctors:doctor_id ( doctor_id, full_name )
         `)
         .eq('visit_id', visitId)
@@ -96,7 +98,14 @@
       if (error) throw error;
       visit = data;
       patient = data.patients;
-      room = data.rooms;
+      const roomData = Array.isArray(data.rooms) ? data.rooms[0] : data.rooms;
+      const roomClasses = /** @type {any} */ (roomData?.room_classes);
+      const roomClass = Array.isArray(roomClasses) ? roomClasses[0] : roomClasses;
+      room = roomData ? {
+        ...roomData,
+        name: roomData.room_number,
+        class: roomClass?.name || '-'
+      } : roomData;
       bed = data.beds;
       doctor = data.doctors;
       if (patient?.date_of_birth) {
@@ -196,9 +205,17 @@
   async function fetchRooms() {
     try {
       const { data, error } = await supabase
-        .from('rooms').select('*').eq('is_active', true).order('name');
+        .from('rooms').select('room_id, room_number, room_classes:class_id ( name ), is_active').eq('is_active', true).order('room_number');
       if (error) throw error;
-      availableRooms = data || [];
+      availableRooms = (data || []).map(r => ({
+        ...r,
+        name: r.room_number,
+        class: (() => {
+          const roomClasses = /** @type {any} */ (r.room_classes);
+          const roomClass = Array.isArray(roomClasses) ? roomClasses[0] : roomClasses;
+          return roomClass?.name || '-';
+        })()
+      }));
     } catch (err) { console.error('Fetch rooms error:', err); }
   }
 
@@ -206,9 +223,12 @@
     if (!roomId) { availableBeds = []; return; }
     try {
       const { data, error } = await supabase
-        .from('beds').select('*').eq('room_id', roomId).eq('status', 'empty').order('bed_no');
+        .from('beds').select('*').eq('room_id', roomId).eq('status', 'empty').order('bed_number');
       if (error) throw error;
-      availableBeds = data || [];
+      availableBeds = (data || []).map(bed => ({
+        ...bed,
+        bed_no: bed.bed_number
+      }));
     } catch (err) { console.error('Fetch beds error:', err); }
   }
 
@@ -468,7 +488,7 @@
     saving = true;
     try {
       const { error } = await supabase.from('patient_visitations').update({
-        discharge_date: new Date().toISOString(),
+        exit_date: new Date().toISOString(),
         discharge_condition: dischargeForm.condition,
         final_diagnosis: dischargeForm.final_diagnosis,
         treatment_summary: dischargeForm.treatment_summary,
@@ -1261,7 +1281,7 @@
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
                 <h4 class="text-sm font-semibold text-gray-700">Pindah Kamar</h4>
                 <div class="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
-                  Saat ini: <strong class="text-gray-900">{room?.name || '-'} ({room?.class || '-'})</strong> - Bed: <strong class="text-gray-900">{bed?.bed_no || '-'}</strong>
+                  Saat ini: <strong class="text-gray-900">{room?.name || '-'} ({room?.class || '-'})</strong> - Bed: <strong class="text-gray-900">{bed?.bed_number || '-'}</strong>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div class="space-y-1">
@@ -1278,7 +1298,7 @@
                     <select class="select-field" bind:value={newTransfer.to_bed_id}>
                       <option value="">Pilih bed...</option>
                       {#each availableBeds as b}
-                        <option value={b.bed_id}>{b.bed_no}</option>
+                        <option value={b.bed_id}>{b.bed_number}</option>
                       {/each}
                     </select>
                   </div>

@@ -61,8 +61,8 @@
 
   function getDaysStayed(inDate) {
     if (!inDate) return 0;
-    const start = new Date(inDate);
-    const now = new Date();
+    const start = new Date(inDate).getTime();
+    const now = Date.now();
     const diff = Math.floor((now - start) / (1000 * 60 * 60 * 24));
     return Math.max(1, diff + 1);
   }
@@ -93,11 +93,19 @@
     try {
       const { data, error } = await supabase
         .from('rooms')
-        .select('*')
+        .select('room_id, room_number, room_classes:class_id ( name ), is_active')
         .eq('is_active', true)
-        .order('name');
+        .order('room_number');
       if (error) throw error;
-      rooms = data || [];
+      rooms = (data || []).map(room => ({
+        ...room,
+        name: room.room_number,
+        class: (() => {
+          const roomClasses = /** @type {any} */ (room.room_classes);
+          const roomClass = Array.isArray(roomClasses) ? roomClasses[0] : roomClasses;
+          return roomClass?.name || '-';
+        })()
+      }));
     } catch (err) {
       console.error('Fetch rooms error:', err);
     }
@@ -108,9 +116,12 @@
       const { data, error } = await supabase
         .from('beds')
         .select('*')
-        .order('bed_no');
+        .order('bed_number');
       if (error) throw error;
-      beds = data || [];
+      beds = (data || []).map(bed => ({
+        ...bed,
+        bed_no: bed.bed_number
+      }));
     } catch (err) {
       console.error('Fetch beds error:', err);
     }
@@ -123,34 +134,43 @@
         .select(`
           visit_id,
           visit_date,
-          admission_date,
-          discharge_date,
+          admission_date:in_date,
+          discharge_date:exit_date,
           patient_id,
           room_id,
           bed_id,
           doctor_id,
-          diagnosis,
+      
           patients:patient_id ( full_name, no_registration ),
-          rooms:room_id ( name, class ),
-          beds:bed_id ( bed_no ),
+          rooms:room_id ( room_number, room_classes:class_id ( name ) ),
+          beds:bed_id ( bed_id, bed_number ),
           doctors:doctor_id ( full_name )
         `)
         .eq('visit_type', 'rawat_inap')
-        .is('discharge_date', null)
-        .order('admission_date', { ascending: false });
+        .is('exit_date', null)
+        .order('in_date', { ascending: false });
 
       if (error) throw error;
 
-      inpatients = (data || []).map(v => ({
-        ...v,
-        patient_name: v.patients?.full_name || '-',
-        patient_no: v.patients?.no_registration || '-',
-        room_name: v.rooms?.name || '-',
-        room_class: v.rooms?.class || '-',
-        bed_no: v.beds?.bed_no || '-',
-        doctor_name: v.doctors?.full_name || '-',
-        days_stayed: getDaysStayed(v.admission_date || v.visit_date)
-      }));
+      inpatients = (data || []).map(v => {
+        const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
+        const room = Array.isArray(v?.rooms) ? v.rooms[0] : v?.rooms;
+        const bed = Array.isArray(v.beds) ? v.beds[0] : v.beds;
+        const doctor = Array.isArray(v.doctors) ? v.doctors[0] : v.doctors;
+        const roomClasses = /** @type {any} */ (room?.room_classes);
+        const roomClass = Array.isArray(roomClasses) ? roomClasses[0] : roomClasses;
+
+        return {
+          ...v,
+          patient_name: patient?.full_name || '-',
+          patient_no: patient?.no_registration || '-',
+          room_name: room?.room_number || '-',
+          room_class: roomClass?.name || '-',
+          bed_id: bed?.bed_number || '-',
+          doctor_name: doctor?.full_name || '-',
+          days_stayed: getDaysStayed(v.admission_date || v.visit_date)
+        };
+      });
     } catch (err) {
       console.error('Fetch inpatients error:', err);
     }
