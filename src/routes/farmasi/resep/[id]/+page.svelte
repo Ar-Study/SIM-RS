@@ -21,7 +21,7 @@
 
   const totalHarga = $derived(
     prescriptions.reduce((sum, rx) => {
-      const price = rx.sell_price || rx.drug?.sell_price || 0;
+      const price = rx.sell_price || rx.drugs?.sell_price || 0;
       return sum + (price * (rx.qty || 0));
     }, 0)
   );
@@ -59,7 +59,7 @@
         .from('prescriptions')
         .select(`
           *,
-          drugs:drug_id ( drug_id, name, unit, sell_price, stock, code )
+          drugs:drug_id ( drug_id, name, unit, sell_price, stock, generic_name )
         `)
         .eq('visit_id', visitId)
         .order('created_at', { ascending: true });
