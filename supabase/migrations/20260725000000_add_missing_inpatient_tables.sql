@@ -71,3 +71,59 @@ BEGIN
 END $$;
 
 NOTIFY pgrst, 'reload schema';
+
+-- ============================================
+-- Add IGD-related columns to patient_visitations
+-- ============================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'triage_level') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN triage_level TEXT CHECK (triage_level IN ('resuscitation','emergency','urgent','less_urgent','non_urgent'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'triage_score') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN triage_score INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'triage_notes') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN triage_notes TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'chief_complaint') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN chief_complaint TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'assessment_id') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN assessment_id UUID REFERENCES public.assessments(assessment_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'disposition_type') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN disposition_type TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'disposition_target_room') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN disposition_target_room TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'disposition_target_bed') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN disposition_target_bed TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'disposition_referral_hospital') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN disposition_referral_hospital TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'disposition_referral_notes') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN disposition_referral_notes TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'patient_visitations' AND column_name = 'disposition_discharge_notes') THEN
+    ALTER TABLE public.patient_visitations ADD COLUMN disposition_discharge_notes TEXT;
+  END IF;
+END $$;
+
+-- Add chief_complaint, anamnesis, physical_exam to assessments table
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'assessments' AND column_name = 'chief_complaint') THEN
+    ALTER TABLE public.assessments ADD COLUMN chief_complaint TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'assessments' AND column_name = 'anamnesis') THEN
+    ALTER TABLE public.assessments ADD COLUMN anamnesis TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'assessments' AND column_name = 'physical_exam') THEN
+    ALTER TABLE public.assessments ADD COLUMN physical_exam TEXT;
+  END IF;
+END $$;
+
+NOTIFY pgrst, 'reload schema';

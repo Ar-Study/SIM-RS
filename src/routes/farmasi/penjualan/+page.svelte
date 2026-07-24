@@ -109,12 +109,17 @@
   async function fetchSales() {
     try {
       const { data, error } = await supabase
-        .from('drug_sales')
+        .from('free_drug_sales')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('sale_date', { ascending: false })
         .limit(50);
       if (error) throw error;
-      sales = data || [];
+      sales = (data || []).map(s => ({
+        ...s,
+        sale_id: 'FS-' + String(s.id),
+        created_at: s.sale_date,
+        total: s.net_amount
+      }));
     } catch (err) {
       console.error('Fetch sales error:', err);
     }
@@ -125,23 +130,14 @@
     saving = true;
 
     try {
-      const saleId = generateId('SAL');
       const { data: saleData, error: saleError } = await supabase
-        .from('drug_sales')
+        .from('free_drug_sales')
         .insert({
-          sale_id: saleId,
           buyer_name: buyerName,
           buyer_phone: buyerPhone,
           payment_method: paymentMethod,
-          total: cartTotal,
-          notes: notes,
-          items: cart.map(c => ({
-            drug_id: c.drug_id,
-            name: c.name,
-            qty: c.qty,
-            unit_price: c.sell_price,
-            subtotal: c.sell_price * c.qty
-          }))
+          total_amount: cartTotal,
+          net_amount: cartTotal
         })
         .select()
         .single();
@@ -149,6 +145,17 @@
       if (saleError) throw saleError;
 
       for (const item of cart) {
+        const { error: itemError } = await supabase
+          .from('free_drug_sale_items')
+          .insert({
+            sale_id: saleData.id,
+            drug_id: item.drug_id,
+            quantity: item.qty,
+            unit_price: item.sell_price,
+            total_price: item.sell_price * item.qty
+          });
+        if (itemError) throw itemError;
+
         const drug = drugs.find(d => d.drug_id === item.drug_id);
         if (drug) {
           const newStock = drug.stock - item.qty;
@@ -168,7 +175,7 @@
               quantity: -item.qty,
               previous_stock: drug.stock,
               new_stock: Math.max(0, newStock),
-              notes: `Penjualan ${saleId} - ${buyerName}`
+              notes: `Penjualan FS-${saleData.id} - ${buyerName}`
             });
         }
       }

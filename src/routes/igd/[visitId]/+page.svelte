@@ -165,6 +165,7 @@
         triage.level = visit.triage_level;
         triage.score = visit.triage_score || '';
         triage.notes = visit.triage_notes || '';
+        assessment.chief_complaint = visit.chief_complaint || '';
       }
 
       if (visit?.assessment_id) {
@@ -174,7 +175,6 @@
           .eq('assessment_id', visit.assessment_id)
           .single();
         if (assessData) {
-          assessment.chief_complaint = assessData.chief_complaint || visit.chief_complaint || '';
           assessment.anamnesis = assessData.anamnesis || '';
           assessment.physical_exam = assessData.physical_exam || '';
           assessment.subjective = assessData.subjective || '';
@@ -187,8 +187,6 @@
           assessment.gcs = assessData.gcs || '';
           assessment.spo2 = assessData.spo2 || '';
         }
-      } else {
-        assessment.chief_complaint = visit.chief_complaint || '';
       }
 
       if (visit?.disposition_type) {
@@ -341,6 +339,8 @@
             chief_complaint: assessment.chief_complaint,
             anamnesis: assessment.anamnesis,
             physical_exam: assessment.physical_exam,
+            subjective: assessment.anamnesis,
+            objective: assessment.physical_exam,
             sistolik: assessment.sistolik ? Number(assessment.sistolik) : null,
             diastolik: assessment.diastolik ? Number(assessment.diastolik) : null,
             suhu: assessment.suhu ? Number(assessment.suhu) : null,
@@ -359,6 +359,8 @@
             chief_complaint: assessment.chief_complaint,
             anamnesis: assessment.anamnesis,
             physical_exam: assessment.physical_exam,
+            subjective: assessment.anamnesis,
+            objective: assessment.physical_exam,
             sistolik: assessment.sistolik ? Number(assessment.sistolik) : null,
             diastolik: assessment.diastolik ? Number(assessment.diastolik) : null,
             suhu: assessment.suhu ? Number(assessment.suhu) : null,

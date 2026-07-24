@@ -114,11 +114,16 @@
   async function fetchSales() {
     try {
       const { data, error } = await supabase
-        .from('drug_sales')
+        .from('free_drug_sales')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('sale_date', { ascending: false });
       if (error) throw error;
-      sales = data || [];
+      sales = (data || []).map(s => ({
+        ...s,
+        sale_id: 'FS-' + String(s.id),
+        created_at: s.sale_date,
+        total: s.net_amount
+      }));
     } catch (err) {
       console.error('Fetch sales error:', err);
     }
@@ -330,7 +335,7 @@
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">
-                          {rx.prescription_id || rx.id?.slice(0, 8) || '-'}
+                          {rx.prescription_id || `RX-${rx.id}` || '-'}
                         </span>
                       </td>
                       <td class="table-cell">
@@ -508,7 +513,7 @@
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">
-                          {sale.sale_id || sale.id?.slice(0, 8) || '-'}
+                          {sale.sale_id || `FS-${sale.id}` || '-'}
                         </span>
                       </td>
                       <td class="table-cell font-medium text-gray-900">{sale.buyer_name || '-'}</td>

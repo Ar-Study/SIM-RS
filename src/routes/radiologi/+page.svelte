@@ -312,7 +312,7 @@
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-sm font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
-                          {order.order_id || order.id?.slice(0, 8) || '-'}
+                          {order.order_id || `RAD-${order.id}` || '-'}
                         </span>
                       </td>
                       <td class="table-cell text-gray-600 font-mono text-xs hidden md:table-cell">{order.no_rm}</td>
@@ -369,7 +369,7 @@
                   <p class="text-lg font-bold text-gray-900">{selectedOrder.patient_name}</p>
                   <div class="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-500">
                     <span>No. RM: <span class="font-mono font-semibold text-gray-700">{selectedOrder.no_rm}</span></span>
-                    <span>No. Order: <span class="font-mono font-semibold text-purple-700">{selectedOrder.order_id || selectedOrder.id?.slice(0, 8)}</span></span>
+                    <span>No. Order: <span class="font-mono font-semibold text-purple-700">{selectedOrder.order_id || `RAD-${selectedOrder.id}`}</span></span>
                     <span>Tgl: <span class="font-semibold text-gray-700">{formatDateTime(selectedOrder.created_at)}</span></span>
                     <span>Dokter: <span class="font-semibold text-gray-700">{selectedOrder.doctor_name}</span></span>
                   </div>
@@ -480,7 +480,7 @@
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-sm font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
-                          {order.order_id || order.id?.slice(0, 8) || '-'}
+                          {order.order_id || `RAD-${order.id}` || '-'}
                         </span>
                       </td>
                       <td class="table-cell text-gray-600 font-mono text-xs hidden md:table-cell">{order.no_rm}</td>

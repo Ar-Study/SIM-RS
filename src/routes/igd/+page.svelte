@@ -43,7 +43,7 @@
     return visits.filter(v =>
       v.patient_name.toLowerCase().includes(q) ||
       v.patient_no?.toLowerCase().includes(q) ||
-      v.chief_complaint?.toLowerCase().includes(q)
+      (v.chief_complaint || '').toLowerCase().includes(q)
     );
   });
 
@@ -54,7 +54,7 @@
     urgent: visits.filter(v => v.triage_level === 'urgent').length,
     less_urgent: visits.filter(v => v.triage_level === 'less_urgent').length,
     non_urgent: visits.filter(v => v.triage_level === 'non_urgent').length,
-    stillHere: visits.filter(v => v.status_keluar === '0').length
+    stillHere: visits.filter(v => v.status_keluar === '0' || !v.status_keluar).length
   });
 
   function getTimeElapsed(dateStr) {
@@ -99,7 +99,6 @@
           status_periksa,
           status_keluar,
           triage_level,
-          triage_score,
           chief_complaint,
           patient_id,
           doctor_id,
@@ -284,6 +283,7 @@
                     {#if v.chief_complaint}
                       <p class="text-xs text-gray-700 bg-gray-100 rounded px-2 py-1 mt-1.5 line-clamp-2">{v.chief_complaint}</p>
                     {/if}
+
                   </button>
                 {/each}
               {/if}

@@ -96,15 +96,15 @@
           visit_date,
           visit_type,
           status_pembayaran,
-          payor_type,
           ticket_no,
-          partial_amount,
           patient_id,
           clinic_id,
           doctor_id,
+          payor_id,
           patients:patient_id ( full_name, no_registration ),
           clinics:clinic_id ( name ),
-          doctors:doctor_id ( full_name )
+          doctors:doctor_id ( full_name ),
+          payors:payor_id ( type )
         `)
         .neq('status_pembayaran', '1')
         .order('visit_date', { ascending: false });
@@ -114,6 +114,7 @@
       const visitIds = (data || []).map(v => v.visit_id);
 
       let billsMap = {};
+      let partialMap = {};
       if (visitIds.length > 0) {
         const { data: bills } = await supabase
           .from('treatment_bills')
@@ -125,6 +126,19 @@
             billsMap[b.visit_id] = (billsMap[b.visit_id] || 0) + (b.amount || 0);
           });
         }
+
+        const { data: invoices } = await supabase
+          .from('billing_invoices')
+          .select('visit_id, status, paid_amount')
+          .in('visit_id', visitIds);
+
+        if (invoices) {
+          invoices.forEach(inv => {
+            if (inv.status === 'partial' || inv.paid_amount > 0) {
+              partialMap[inv.visit_id] = (partialMap[inv.visit_id] || 0) + (inv.paid_amount || 0);
+            }
+          });
+        }
       }
 
       visits = (data || []).map(v => ({
@@ -134,7 +148,9 @@
         clinic_name: v.clinics?.name || '-',
         doctor_name: v.doctors?.full_name || '-',
         total_tagihan: billsMap[v.visit_id] || 0,
-        total_dibayar: v.partial_amount || 0,
+        total_dibayar: partialMap[v.visit_id] || 0,
+        partial_amount: partialMap[v.visit_id] || 0,
+        payor_type: v.payors?.type || 'personal',
         invoice_no: `INV-${v.visit_id?.slice(-8) || '-'}`
       }));
     } catch (err) {
