@@ -244,58 +244,74 @@
       console.error('Fetch bills error:', err);
     }
   }
-
-  async function saveAssessment() {
-    saving = true;
-    try {
-      if (visit?.assessment_id) {
-        const { error } = await supabase
-          .from('assessments')
-          .update({
-            subjective: assessment.subjective,
-            objective: assessment.objective,
-            sistolik: assessment.sistolik ? Number(assessment.sistolik) : null,
-            diastolik: assessment.diastolik ? Number(assessment.diastolik) : null,
-            suhu: assessment.suhu ? Number(assessment.suhu) : null,
-            nadi: assessment.nadi ? Number(assessment.nadi) : null,
-            rr: assessment.rr ? Number(assessment.rr) : null,
-            gcs: assessment.gcs ? Number(assessment.gcs) : null,
-            tb: assessment.tb ? Number(assessment.tb) : null,
-            bb: assessment.bb ? Number(assessment.bb) : null,
-            spo2: assessment.spo2 ? Number(assessment.spo2) : null
-          })
-          .eq('assessment_id', visit.assessment_id);
-
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('assessments')
-          .insert({
-            visit_id: visitId,
-            subjective: assessment.subjective,
-            objective: assessment.objective,
-            sistolik: assessment.sistolik ? Number(assessment.sistolik) : null,
-            diastolik: assessment.diastolik ? Number(assessment.diastolik) : null,
-            suhu: assessment.suhu ? Number(assessment.suhu) : null,
-            nadi: assessment.nadi ? Number(assessment.nadi) : null,
-            rr: assessment.rr ? Number(assessment.rr) : null,
-            gcs: assessment.gcs ? Number(assessment.gcs) : null,
-            tb: assessment.tb ? Number(assessment.tb) : null,
-            bb: assessment.bb ? Number(assessment.bb) : null,
-            spo2: assessment.spo2 ? Number(assessment.spo2) : null
-          })
-          .select()
-          .maybeSingle();
-
-        if (error) throw error;
-        visit = { ...visit, assessment_id: data.assessment_id };
-      }
-    } catch (err) {
-      console.error('Save assessment error:', err);
-    } finally {
-      saving = false;
-    }
+  
+async function saveAssessment() {
+  // Pastikan variabel visitId dan data assessment valid sebelum menembak API
+  if (!visitId) {
+    console.error('Save assessment error: visitId is required');
+    alert('Gagal menyimpan: ID Kunjungan tidak ditemukan.');
+    return;
   }
+
+  saving = true;
+  try {
+    if (visit?.assessment_id) {
+      // PROSES UPDATE
+      const { error } = await supabase
+        .from('assessments')
+        .update({
+          subjective: assessment.subjective || null,
+          objective: assessment.objective || null,
+          sistolik: assessment.sistolik ? Number(assessment.sistolik) : null,
+          diastolik: assessment.diastolik ? Number(assessment.diastolik) : null,
+          suhu: assessment.suhu ? Number(assessment.suhu) : null,
+          nadi: assessment.nadi ? Number(assessment.nadi) : null,
+          rr: assessment.rr ? Number(assessment.rr) : null,
+          gcs: assessment.gcs ? Number(assessment.gcs) : null,
+          tb: assessment.tb ? Number(assessment.tb) : null,
+          bb: assessment.bb ? Number(assessment.bb) : null,
+          spo2: assessment.spo2 ? Number(assessment.spo2) : null
+        })
+        .eq('assessment_id', visit.assessment_id);
+
+      if (error) throw error;
+      alert('Asesmen berhasil diperbarui!');
+    } else {
+      // PROSES INSERT
+      const { data, error } = await supabase
+        .from('assessments')
+        .insert({
+          visit_id: visitId,
+          subjective: assessment.subjective || null,
+          objective: assessment.objective || null,
+          sistolik: assessment.sistolik ? Number(assessment.sistolik) : null,
+          diastolik: assessment.diastolik ? Number(assessment.diastolik) : null,
+          suhu: assessment.suhu ? Number(assessment.suhu) : null,
+          nadi: assessment.nadi ? Number(assessment.nadi) : null,
+          rr: assessment.rr ? Number(assessment.rr) : null,
+          gcs: assessment.gcs ? Number(assessment.gcs) : null,
+          tb: assessment.tb ? Number(assessment.tb) : null,
+          bb: assessment.bb ? Number(assessment.bb) : null,
+          spo2: assessment.spo2 ? Number(assessment.spo2) : null
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      if (data?.assessment_id) {
+        // Amankan penulisan objek untuk memicu reaktivitas Svelte
+        visit = { ...visit, assessment_id: data.assessment_id };
+        alert('Asesmen baru berhasil disimpan!');
+      }
+    }
+  } catch (err) {
+    console.error('Save assessment error:', err);
+    alert(`Gagal menyimpan data: ${err.message || err}`);
+  } finally {
+    saving = false;
+  }
+}
 
   async function saveCppt() {
     if (!newCppt.subyektif.trim() && !newCppt.obyektif.trim()) return;
