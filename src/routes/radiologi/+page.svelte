@@ -16,25 +16,27 @@
     impression: ''
   });
 
+  // Mapped status badge untuk UI
+  function getStatusBadge(status) {
+    const map = {
+      ordered: { label: 'Dipesan', class: 'badge-info' },
+      in_progress: { label: 'Diproses', class: 'badge-warning' },
+      completed: { label: 'Selesai', class: 'badge-success' },
+      cancelled: { label: 'Dibatalkan', class: 'badge-danger' }
+    };
+    return map[status] || { label: status || 'Pending', class: 'badge-gray' };
+  }
+
   let stats = $derived({
     todayOrders: orders.filter(o => {
+      if (!o.created_at) return false;
       const d = new Date(o.created_at);
       const today = new Date();
       return d.toDateString() === today.toDateString();
     }).length,
-    inProgress: orders.filter(o => o.status === 'diproses').length,
+    inProgress: orders.filter(o => o.status === 'in_progress').length,
     completed: completedOrders.length
   });
-
-  function getStatusBadge(status) {
-    const map = {
-      dipesan: { label: 'Dipesan', class: 'badge-info' },
-      diproses: { label: 'Diproses', class: 'badge-warning' },
-      selesai: { label: 'Selesai', class: 'badge-success' },
-      dibatalkan: { label: 'Dibatalkan', class: 'badge-danger' }
-    };
-    return map[status] || { label: status, class: 'badge-gray' };
-  }
 
   async function fetchOrders() {
     try {
@@ -49,9 +51,11 @@
             doctors:doctor_id ( full_name )
           )
         `)
-        .in('status', ['dipesan', 'diproses'])
+        .in('status', ['ordered', 'in_progress']) // Ambil order baru & yang sedang diproses
         .order('created_at', { ascending: false });
+
       if (error) throw error;
+
       orders = (data || []).map(o => ({
         ...o,
         patient_name: o.patient_visitations?.patients?.full_name || '-',
@@ -78,9 +82,11 @@
             doctors:doctor_id ( full_name )
           )
         `)
-        .eq('status', 'selesai')
-        .order('updated_at', { ascending: false });
+        .eq('status', 'completed') // Menggunakan 'completed' sesuai constraint DB
+        .order('completed_at', { ascending: false });
+
       if (error) throw error;
+
       completedOrders = (data || []).map(o => ({
         ...o,
         patient_name: o.patient_visitations?.patients?.full_name || '-',
@@ -98,8 +104,9 @@
     try {
       const { error } = await supabase
         .from('radiology_orders')
-        .update({ status: 'diproses' })
+        .update({ status: 'in_progress' }) // Menggunakan 'in_progress' bukan 'diproses'
         .eq('id', order.id);
+
       if (error) throw error;
       await fetchOrders();
     } catch (err) {
@@ -112,7 +119,7 @@
   function openInputHasil(order) {
     selectedOrder = order;
     resultData = {
-      result: order.result || '',
+      result: order.results || order.result || '', // Mendukung kolom 'results' atau 'result'
       impression: order.impression || ''
     };
     activeTab = 'input_hasil';
@@ -125,11 +132,14 @@
       const { error } = await supabase
         .from('radiology_orders')
         .update({
-          result: resultData.result,
+          results: resultData.result, // Menyesuaikan dengan nama kolom 'results' di DB
+          result: resultData.result,   // Disimpan ke kedua kolom jika ada fallback
           impression: resultData.impression,
-          status: 'selesai'
+          status: 'completed',         // Menggunakan 'completed' bukan 'selesai'
+          completed_at: new Date().toISOString() // Set timestamp penyelesaian
         })
         .eq('id', selectedOrder.id);
+
       if (error) throw error;
 
       selectedOrder = null;
@@ -312,7 +322,7 @@
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-sm font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
-                          {order.order_id || order.id?.slice(0, 8) || '-'}
+                          {order.order_id || `RAD-${order.id}` || '-'}
                         </span>
                       </td>
                       <td class="table-cell text-gray-600 font-mono text-xs hidden md:table-cell">{order.no_rm}</td>
@@ -330,11 +340,11 @@
                         <span class="badge {status.class}">{status.label}</span>
                       </td>
                       <td class="table-cell text-right">
-                        {#if order.status === 'dipesan'}
+                        {#if order.status === 'ordered'}
                           <button class="btn-primary btn-sm text-xs" onclick={() => startProcessing(order)} disabled={saving}>
                             Proses
                           </button>
-                        {:else if order.status === 'diproses'}
+                        {:else if order.status === 'in_progress'}
                           <button class="btn-success btn-sm text-xs" onclick={() => openInputHasil(order)}>
                             <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                               <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
@@ -369,7 +379,7 @@
                   <p class="text-lg font-bold text-gray-900">{selectedOrder.patient_name}</p>
                   <div class="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-gray-500">
                     <span>No. RM: <span class="font-mono font-semibold text-gray-700">{selectedOrder.no_rm}</span></span>
-                    <span>No. Order: <span class="font-mono font-semibold text-purple-700">{selectedOrder.order_id || selectedOrder.id?.slice(0, 8)}</span></span>
+                    <span>No. Order: <span class="font-mono font-semibold text-purple-700">{selectedOrder.order_id || `RAD-${selectedOrder.id}`}</span></span>
                     <span>Tgl: <span class="font-semibold text-gray-700">{formatDateTime(selectedOrder.created_at)}</span></span>
                     <span>Dokter: <span class="font-semibold text-gray-700">{selectedOrder.doctor_name}</span></span>
                   </div>
@@ -480,7 +490,7 @@
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-sm font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
-                          {order.order_id || order.id?.slice(0, 8) || '-'}
+                          {order.order_id || `RAD-${order.id}` || '-'}
                         </span>
                       </td>
                       <td class="table-cell text-gray-600 font-mono text-xs hidden md:table-cell">{order.no_rm}</td>
@@ -494,7 +504,7 @@
                         <span class="badge badge-purple">{order.examination_type || '-'}</span>
                       </td>
                       <td class="table-cell text-gray-600 hidden lg:table-cell">{order.doctor_name}</td>
-                      <td class="table-cell text-gray-500 hidden lg:table-cell text-xs">{formatDateTime(order.updated_at)}</td>
+                      <td class="table-cell text-gray-500 hidden lg:table-cell text-xs">{formatDateTime(order.completed_at)}</td>
                       <td class="table-cell">
                         <span class="badge badge-success">Selesai</span>
                       </td>

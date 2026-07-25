@@ -21,7 +21,7 @@
 
   const totalHarga = $derived(
     prescriptions.reduce((sum, rx) => {
-      const price = rx.sell_price || rx.drug?.sell_price || 0;
+      const price = rx.sell_price || rx.drugs?.sell_price || 0;
       return sum + (price * (rx.qty || 0));
     }, 0)
   );
@@ -37,7 +37,7 @@
         .select(`
           *,
           patients:patient_id ( patient_id, full_name, no_registration, date_of_birth, gender, phone, address ),
-          doctors:doctor_id ( doctor_id, full_name ),
+          doctors:doctor_id ( employee_id, full_name ),
           clinics:clinic_id ( clinic_id, name )
         `)
         .eq('visit_id', visitId)
@@ -59,7 +59,7 @@
         .from('prescriptions')
         .select(`
           *,
-          drugs:drug_id ( drug_id, name, unit, sell_price, stock, code )
+          drugs:drug_id ( drug_id, name, unit, sell_price, stock, generic_name )
         `)
         .eq('visit_id', visitId)
         .order('created_at', { ascending: true });
@@ -94,7 +94,7 @@
 
       for (const rx of undispensed) {
         const newStock = (rx.drugs?.stock || 0) - (rx.qty || 0);
-
+        // console.log("visit_id", rx.visit_id);
         const { error: rxError } = await supabase
           .from('prescriptions')
           .update({
@@ -102,7 +102,7 @@
             dispensed_at: now,
             dispensed_notes: notes
           })
-          .eq('id', rx.id);
+          .eq('visit_id', rx.visit_id);
 
         if (rxError) throw rxError;
 
@@ -118,10 +118,9 @@
             .from('drug_stock_logs')
             .insert({
               drug_id: rx.drug_id,
-              change_type: 'dispense',
+              change_type: 'out',
               quantity: -(rx.qty || 0),
-              previous_stock: rx.drugs.stock,
-              new_stock: Math.max(0, newStock),
+              reference: `resep-${visitId}`,
               notes: `Resep ${visitId} - ${patient?.full_name || '-'}`
             });
 

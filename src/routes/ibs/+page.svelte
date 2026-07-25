@@ -110,7 +110,7 @@
           *,
           patients:patient_id ( full_name, no_registration ),
           doctors:surgeon_id ( full_name ),
-          rooms:room_id ( name )
+          rooms:room_id ( room_number )
         `)
         .order('scheduled_time', { ascending: false })
         .limit(100);
@@ -120,7 +120,7 @@
         patient_name: s.patients?.full_name || '-',
         patient_no: s.patients?.no_registration || '-',
         surgeon_name: s.doctors?.full_name || '-',
-        room_name: s.rooms?.name || '-'
+        room_name: s.rooms?.room_number || '-'
       }));
     } catch (err) {
       console.error('Fetch IBS surgeries error:', err);

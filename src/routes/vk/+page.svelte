@@ -183,9 +183,19 @@
 
   async function fetchBeds() {
     try {
-      const { data, error } = await supabase.from('beds').select('*, rooms:room_id (name, class)').order('bed_no');
+      const { data, error } = await supabase.from('beds').select('*, rooms:room_id (room_number, room_classes:class_id (name))').order('bed_number');
       if (error) throw error;
-      beds = (data || []).filter(b => b.rooms?.class === 'VK');
+      beds = (data || []).map(b => {
+        const room = Array.isArray(b.rooms) ? b.rooms[0] : b.rooms;
+        const roomClass = Array.isArray(room?.room_classes) ? room.room_classes[0] : room?.room_classes;
+        return {
+          ...b,
+          bed_no: b.bed_number,
+          rooms: room
+            ? { ...room, name: room.room_number, class: roomClass?.name || '-' }
+            : room
+        };
+      }).filter(b => b.rooms?.class === 'VK');
     } catch (err) {
       console.error('Fetch VK beds error:', err);
     }

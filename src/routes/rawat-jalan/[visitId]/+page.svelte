@@ -191,7 +191,7 @@
         .from('lab_orders')
         .select('*')
         .eq('visit_id', visitId)
-        .order('created_by', { ascending: false });
+        .order('order_date', { ascending: false });
 
       if (error) throw error;
       labOrders = data || [];

@@ -101,10 +101,20 @@
     try {
       const { data, error } = await supabase
         .from('beds')
-        .select('*, rooms:room_id (name, class)')
-        .order('bed_no');
+        .select('*, rooms:room_id (room_number, room_classes:class_id (name))')
+        .order('bed_number');
       if (error) throw error;
-      beds = (data || []).filter(b => b.rooms?.class === 'ICU' || b.rooms?.class === 'HCU');
+      beds = (data || []).map(b => {
+        const room = Array.isArray(b.rooms) ? b.rooms[0] : b.rooms;
+        const roomClass = Array.isArray(room?.room_classes) ? room.room_classes[0] : room?.room_classes;
+        return {
+          ...b,
+          bed_no: b.bed_number,
+          rooms: room
+            ? { ...room, name: room.room_number, class: roomClass?.name || '-' }
+            : room
+        };
+      }).filter(b => b.rooms?.class === 'ICU' || b.rooms?.class === 'HCU');
     } catch (err) {
       console.error('Fetch ICU beds error:', err);
     }
@@ -116,26 +126,26 @@
         .from('patient_visitations')
         .select(`
           visit_id,
-          admission_date,
+          admission_date:in_date,
           patient_id,
           room_id,
           doctor_id,
           diagnosis,
           patients:patient_id ( full_name, no_registration ),
-          rooms:room_id ( name, class ),
+          rooms:room_id ( room_number, room_classes:class_id ( name ) ),
           doctors:doctor_id ( full_name )
         `)
         .eq('visit_type', 'rawat_inap')
-        .is('discharge_date', null)
-        .order('admission_date', { ascending: false });
+        .is('exit_date', null)
+        .order('in_date', { ascending: false });
       if (error) throw error;
 
       const allPatients = (data || []).map(v => ({
         ...v,
         patient_name: v.patients?.full_name || '-',
         patient_no: v.patients?.no_registration || '-',
-        room_name: v.rooms?.name || '-',
-        room_class: v.rooms?.class || '-',
+        room_name: v.rooms?.room_number || '-',
+        room_class: (Array.isArray(v.rooms?.room_classes) ? v.rooms.room_classes[0] : v.rooms?.room_classes)?.name || '-',
         doctor_name: v.doctors?.full_name || '-',
         days_stayed: getDaysStayed(v.admission_date),
         condition: 'stable',

@@ -38,6 +38,7 @@
       const today = new Date();
       return d.toDateString() === today.toDateString();
     }).length,
+    
     todaySales: sales.filter(s => {
       const d = new Date(s.created_at);
       const today = new Date();
@@ -49,6 +50,9 @@
     let result = prescriptions;
     if (activeTab === 'resep') {
       result = result.filter(p => p.status === 'pending');
+    }
+    if (activeTab === 'resep_done') {
+      result = result.filter(p => p.status === 'dispensed');
     }
     return result;
   });
@@ -114,11 +118,16 @@
   async function fetchSales() {
     try {
       const { data, error } = await supabase
-        .from('drug_sales')
+        .from('free_drug_sales')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('sale_date', { ascending: false });
       if (error) throw error;
-      sales = data || [];
+      sales = (data || []).map(s => ({
+        ...s,
+        sale_id: 'FS-' + String(s.id),
+        created_at: s.sale_date,
+        total: s.net_amount
+      }));
     } catch (err) {
       console.error('Fetch sales error:', err);
     }
@@ -285,17 +294,18 @@
     </div>
 
     <div class="p-6">
-      {#if activeTab === 'resep'}
+      {#if activeTab === 'resep' || activeTab === 'resep_done'}
         <div class="space-y-4">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-semibold text-gray-900">Resep Masuk</h3>
             <div class="flex gap-2">
               <select class="select-field text-sm w-auto" bind:value={activeTab}>
                 <option value="resep">Menunggu</option>
+                <option value="resep_done">Selesai</option>
               </select>
             </div>
           </div>
-
+                  
           {#if loading}
             <div class="flex items-center justify-center py-16">
               <div class="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
@@ -330,7 +340,7 @@
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">
-                          {rx.prescription_id || rx.id?.slice(0, 8) || '-'}
+                          {rx.prescription_id || `RX-${rx.id}` || '-'}
                         </span>
                       </td>
                       <td class="table-cell">
@@ -508,7 +518,7 @@
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">
-                          {sale.sale_id || sale.id?.slice(0, 8) || '-'}
+                          {sale.sale_id || `FS-${sale.id}` || '-'}
                         </span>
                       </td>
                       <td class="table-cell font-medium text-gray-900">{sale.buyer_name || '-'}</td>

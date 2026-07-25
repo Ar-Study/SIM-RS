@@ -3,9 +3,12 @@
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
   import { formatDate } from '$lib/utils/helpers.js';
+  import { DISCHARGE_CONDITIONS } from '$lib/utils/constants.js';
 
   let loading = $state(true);
+  let activeTab = $state('aktif');
   let inpatients = $state([]);
+  let dischargedPatients = $state([]);
   let rooms = $state([]);
   let beds = $state([]);
   let selectedClass = $state('');
@@ -18,15 +21,15 @@
 
   const stats = $derived({
     total: beds.length,
-    terisi: beds.filter(b => b.status === 'occupied').length,
-    kosong: beds.filter(b => b.status === 'empty').length,
-    okupansi: beds.length > 0 ? Math.round((beds.filter(b => b.status === 'occupied').length / beds.length) * 100) : 0
+    terisi: beds.filter(b => b.is_occupied === true).length,
+    kosong: beds.filter(b => b.is_occupied === false).length,
+    okupansi: beds.length > 0 ? Math.round((beds.filter(b => b.is_occupied === true).length / beds.length) * 100) : 0
   });
 
   const roomCards = $derived.by(() => {
     let result = rooms.map(room => {
       const roomBeds = beds.filter(b => b.room_id === room.room_id);
-      const occupied = roomBeds.filter(b => b.status === 'occupied').length;
+      const occupied = roomBeds.filter(b => b.is_occupied === true).length;
       const total = roomBeds.length;
       return {
         ...room,
@@ -45,24 +48,22 @@
     return result;
   });
 
-  const filteredInpatients = $derived.by(() => {
-    let result = inpatients;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(p =>
-        p.patient_name.toLowerCase().includes(q) ||
-        p.patient_no?.toLowerCase().includes(q) ||
-        p.room_name?.toLowerCase().includes(q) ||
-        p.doctor_name?.toLowerCase().includes(q)
-      );
-    }
-    return result;
+  const displayedPatients = $derived.by(() => {
+    const source = activeTab === 'riwayat' ? dischargedPatients : inpatients;
+    if (!searchQuery.trim()) return source;
+    const q = searchQuery.toLowerCase();
+    return source.filter(p =>
+      p.patient_name.toLowerCase().includes(q) ||
+      p.patient_no?.toLowerCase().includes(q) ||
+      p.room_name?.toLowerCase().includes(q) ||
+      p.doctor_name?.toLowerCase().includes(q)
+    );
   });
 
   function getDaysStayed(inDate) {
     if (!inDate) return 0;
-    const start = new Date(inDate);
-    const now = new Date();
+    const start = new Date(inDate).getTime();
+    const now = Date.now();
     const diff = Math.floor((now - start) / (1000 * 60 * 60 * 24));
     return Math.max(1, diff + 1);
   }
@@ -93,11 +94,19 @@
     try {
       const { data, error } = await supabase
         .from('rooms')
-        .select('*')
+        .select('room_id, room_number, room_classes:class_id ( name ), is_active')
         .eq('is_active', true)
-        .order('name');
+        .order('room_number');
       if (error) throw error;
-      rooms = data || [];
+      rooms = (data || []).map(room => ({
+        ...room,
+        name: room.room_number,
+        class: (() => {
+          const roomClasses = /** @type {any} */ (room.room_classes);
+          const roomClass = Array.isArray(roomClasses) ? roomClasses[0] : roomClasses;
+          return roomClass?.name || '-';
+        })()
+      }));
     } catch (err) {
       console.error('Fetch rooms error:', err);
     }
@@ -108,9 +117,12 @@
       const { data, error } = await supabase
         .from('beds')
         .select('*')
-        .order('bed_no');
+        .order('bed_number');
       if (error) throw error;
-      beds = data || [];
+      beds = (data || []).map(bed => ({
+        ...bed,
+        bed_no: bed.bed_number
+      }));
     } catch (err) {
       console.error('Fetch beds error:', err);
     }
@@ -123,42 +135,102 @@
         .select(`
           visit_id,
           visit_date,
-          admission_date,
-          discharge_date,
+          in_date,
+          exit_date,
           patient_id,
           room_id,
           bed_id,
           doctor_id,
-          diagnosis,
+      
           patients:patient_id ( full_name, no_registration ),
-          rooms:room_id ( name, class ),
-          beds:bed_id ( bed_no ),
+          rooms:room_id ( room_number, room_classes:class_id ( name ) ),
+          beds:bed_id ( bed_id, bed_number ),
           doctors:doctor_id ( full_name )
         `)
         .eq('visit_type', 'rawat_inap')
-        .is('discharge_date', null)
-        .order('admission_date', { ascending: false });
+        .is('exit_date', null)
+        .order('in_date', { ascending: false });
 
       if (error) throw error;
 
-      inpatients = (data || []).map(v => ({
-        ...v,
-        patient_name: v.patients?.full_name || '-',
-        patient_no: v.patients?.no_registration || '-',
-        room_name: v.rooms?.name || '-',
-        room_class: v.rooms?.class || '-',
-        bed_no: v.beds?.bed_no || '-',
-        doctor_name: v.doctors?.full_name || '-',
-        days_stayed: getDaysStayed(v.admission_date || v.visit_date)
-      }));
+      inpatients = (data || []).map(v => {
+        const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
+        const room = Array.isArray(v?.rooms) ? v.rooms[0] : v?.rooms;
+        const bed = Array.isArray(v.beds) ? v.beds[0] : v.beds;
+        const doctor = Array.isArray(v.doctors) ? v.doctors[0] : v.doctors;
+        const roomClasses = /** @type {any} */ (room?.room_classes);
+        const roomClass = Array.isArray(roomClasses) ? roomClasses[0] : roomClasses;
+
+        return {
+          ...v,
+          patient_name: patient?.full_name || '-',
+          patient_no: patient?.no_registration || '-',
+          room_name: room?.room_number || '-',
+          room_class: roomClass?.name || '-',
+          bed_id: bed?.bed_number || '-',
+          doctor_name: doctor?.full_name || '-',
+          days_stayed: getDaysStayed(v.in_date || v.visit_date)
+        };
+      });
     } catch (err) {
       console.error('Fetch inpatients error:', err);
     }
   }
 
+  async function fetchDischargedPatients() {
+    try {
+      const { data, error } = await supabase
+        .from('patient_visitations')
+        .select(`
+          visit_id,
+          visit_date,
+          in_date,
+          exit_date,
+          patient_id,
+          room_id,
+          bed_id,
+          doctor_id,
+      
+          patients:patient_id ( full_name, no_registration ),
+          rooms:room_id ( room_number, room_classes:class_id ( name ) ),
+          beds:bed_id ( bed_id, bed_number ),
+          doctors:doctor_id ( full_name ),
+          discharge_summaries:visit_id ( discharge_condition, final_diagnosis )
+        `)
+        .eq('visit_type', 'rawat_inap')
+        .not('exit_date', 'is', null)
+        .order('exit_date', { ascending: false });
+
+      if (error) throw error;
+
+      dischargedPatients = (data || []).map(v => {
+        const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
+        const room = Array.isArray(v?.rooms) ? v.rooms[0] : v?.rooms;
+        const doctor = Array.isArray(v.doctors) ? v.doctors[0] : v.doctors;
+        const roomClasses = /** @type {any} */ (room?.room_classes);
+        const roomClass = Array.isArray(roomClasses) ? roomClasses[0] : roomClasses;
+        const discharge = Array.isArray(v.discharge_summaries) ? v.discharge_summaries[0] : v.discharge_summaries;
+
+        return {
+          ...v,
+          patient_name: patient?.full_name || '-',
+          patient_no: patient?.no_registration || '-',
+          room_name: room?.room_number || '-',
+          room_class: roomClass?.name || '-',
+          doctor_name: doctor?.full_name || '-',
+          discharge_condition: discharge?.discharge_condition || '-',
+          final_diagnosis: discharge?.final_diagnosis || '-',
+          days_stayed: getDaysStayed(v.in_date || v.visit_date)
+        };
+      });
+    } catch (err) {
+      console.error('Fetch discharged patients error:', err);
+    }
+  }
+
   async function refreshAll() {
     loading = true;
-    await Promise.all([fetchRooms(), fetchBeds(), fetchInpatients()]);
+    await Promise.all([fetchRooms(), fetchBeds(), fetchInpatients(), fetchDischargedPatients()]);
     loading = false;
   }
 
@@ -279,12 +351,24 @@
       </div>
 
       <div class="card">
-        <div class="flex items-center gap-2 mb-4">
-          <svg class="w-5 h-5 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-          </svg>
-          <h2 class="text-lg font-semibold text-gray-900">Daftar Pasien Rawat Inap</h2>
-        </div>
+          <div class="flex items-center justify-between gap-2 mb-4">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+              </svg>
+              <h2 class="text-lg font-semibold text-gray-900">Daftar Pasien Rawat Inap</h2>
+            </div>
+            <div class="flex bg-gray-100 rounded-lg p-1">
+              <button
+                class="px-3 py-1.5 text-sm font-medium rounded-md transition-all {activeTab === 'aktif' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}"
+                onclick={() => activeTab = 'aktif'}
+              >Aktif ({inpatients.length})</button>
+              <button
+                class="px-3 py-1.5 text-sm font-medium rounded-md transition-all {activeTab === 'riwayat' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}"
+                onclick={() => activeTab = 'riwayat'}
+              >Riwayat ({dischargedPatients.length})</button>
+            </div>
+          </div>
 
         <div class="flex-1 mb-4">
           <div class="relative">
@@ -305,13 +389,13 @@
             <div class="flex items-center justify-center py-16">
               <div class="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
             </div>
-          {:else if filteredInpatients.length === 0}
+          {:else if displayedPatients.length === 0}
             <div class="text-center py-16 text-gray-400">
               <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 0 1 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
               </svg>
-              <p class="text-lg font-medium">Tidak ada pasien rawat inap</p>
-              <p class="text-sm mt-1">Belum ada pasien yang sedang dirawat</p>
+              <p class="text-lg font-medium">{activeTab === 'riwayat' ? 'Tidak ada riwayat pulang' : 'Tidak ada pasien rawat inap'}</p>
+              <p class="text-sm mt-1">{activeTab === 'riwayat' ? 'Belum ada pasien yang sudah pulang' : 'Belum ada pasien yang sedang dirawat'}</p>
             </div>
           {:else}
             <table class="w-full">
@@ -322,15 +406,15 @@
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nama Pasien</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Kamar</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Kelas</th>
-                  <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">Tgl Masuk</th>
-                  <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Hari ke-</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">{activeTab === 'riwayat' ? 'Tgl Pulang' : 'Tgl Masuk'}</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{activeTab === 'riwayat' ? 'Kondisi' : 'Hari ke-'}</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Dokter</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
-                {#each filteredInpatients as ip, i}
-                  <tr class="hover:bg-gray-50 transition-colors">
+                {#each displayedPatients as ip, i}
+                  <tr class="hover:bg-gray-50 transition-colors {activeTab === 'riwayat' ? 'text-gray-500' : ''}">
                     <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                     <td class="table-cell">
                       <span class="font-mono text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">
@@ -345,12 +429,18 @@
                       <span class="badge badge-gray">{ip.room_class}</span>
                     </td>
                     <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">
-                      {formatDate(ip.admission_date || ip.visit_date)}
+                      {formatDate(activeTab === 'riwayat' ? ip.exit_date : (ip.in_date || ip.visit_date))}
                     </td>
                     <td class="table-cell">
-                      <span class="inline-flex items-center justify-center w-8 h-8 rounded-full {ip.days_stayed > 7 ? 'bg-red-100 text-red-700' : ip.days_stayed > 3 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'} text-xs font-bold">
-                        {ip.days_stayed}
-                      </span>
+                      {#if activeTab === 'riwayat'}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium {ip.discharge_condition === 'sembuh' ? 'bg-emerald-100 text-emerald-700' : ip.discharge_condition === 'berobat_jalan' ? 'bg-blue-100 text-blue-700' : ip.discharge_condition === 'rujuk' ? 'bg-amber-100 text-amber-700' : ip.discharge_condition === 'meninggal' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}">
+                          {DISCHARGE_CONDITIONS[ip.discharge_condition] || ip.discharge_condition}
+                        </span>
+                      {:else}
+                        <span class="inline-flex items-center justify-center w-8 h-8 rounded-full {ip.days_stayed > 7 ? 'bg-red-100 text-red-700' : ip.days_stayed > 3 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'} text-xs font-bold">
+                          {ip.days_stayed}
+                        </span>
+                      {/if}
                     </td>
                     <td class="table-cell text-gray-600 hidden lg:table-cell">{ip.doctor_name}</td>
                     <td class="table-cell text-right">
@@ -502,10 +592,10 @@
           <h4 class="text-sm font-semibold text-gray-700 mb-3">Daftar Tempat Tidur</h4>
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {#each beds.filter(b => b.room_id === selectedRoom.room_id) as bed}
-              <div class="rounded-lg border px-3 py-2 {bed.status === 'occupied' ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}">
+              <div class="rounded-lg border px-3 py-2 {bed.is_occupied ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}">
                 <div class="flex items-center justify-between">
                   <span class="text-sm font-semibold text-gray-900">{bed.bed_no}</span>
-                  {#if bed.status === 'occupied'}
+                  {#if bed.is_occupied}
                     <svg class="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                     </svg>
@@ -515,8 +605,8 @@
                     </svg>
                   {/if}
                 </div>
-                <p class="text-xs {bed.status === 'occupied' ? 'text-red-500' : 'text-emerald-500'} mt-0.5">
-                  {bed.status === 'occupied' ? 'Terisi' : 'Kosong'}
+                <p class="text-xs {bed.is_occupied ? 'text-red-500' : 'text-emerald-500'} mt-0.5">
+                  {bed.is_occupied ? 'Terisi' : 'Kosong'}
                 </p>
               </div>
             {/each}

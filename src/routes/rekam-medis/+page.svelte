@@ -88,7 +88,7 @@
         .from('patient_visitations')
         .select('*', { count: 'exact', head: true })
         .eq('visit_type', 'rawat_inap')
-        .is('discharge_date', null);
+        .is('exit_date', null);
 
       stats = {
         totalPasien: totalPasien || 0,
