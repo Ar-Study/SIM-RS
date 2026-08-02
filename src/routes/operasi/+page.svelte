@@ -1,21 +1,21 @@
 <script>
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime, generateId } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
 
   let loading = $state(true);
   let activeTab = $state('jadwal');
 
-  let surgeries = $state([]);
+  let okClinicId = $state('POL-OK');
+  let visits = $state([]);
   let requests = $state([]);
-  let patients = $state([]);
   let doctors = $state([]);
-  let rooms = $state([]);
 
   let showForm = $state(false);
   let saving = $state(false);
 
   let newRequest = $state({
+    visit_id: '',
     patient_id: '',
     procedure_name: '',
     description: '',
@@ -29,24 +29,20 @@
   const anesthesiaTypes = ['umum', 'regional', 'spinal', 'epidural', 'lokal', 'sedasi'];
 
   const stats = $derived({
-    total: surgeries.length,
-    scheduled: surgeries.filter(s => s.status === 'scheduled').length,
-    inProgress: surgeries.filter(s => s.status === 'in_progress').length,
-    completed: surgeries.filter(s => s.status === 'completed').length,
-    cancelled: surgeries.filter(s => s.status === 'cancelled').length
+    total: visits.length,
+    menunggu: visits.filter(v => v.status_keluar === '0' && v.status_periksa === '0').length,
+    diperiksa: visits.filter(v => v.status_keluar === '0' && v.status_periksa === '1').length,
+    selesai: visits.filter(v => v.status_keluar === '1').length,
+    pengajuan: requests.filter(r => r.status === 'pending').length
   });
 
-  const todaySurgeries = $derived.by(() => {
-    const today = new Date().toDateString();
-    return surgeries.filter(s => {
-      const schedDate = new Date(s.scheduled_time);
-      return schedDate.toDateString() === today;
-    }).sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time));
-  });
+  const todayVisits = $derived(
+    [...visits].sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date))
+  );
 
   const pendingRequests = $derived(requests.filter(r => r.status === 'pending'));
 
-  const completedSurgeries = $derived(surgeries.filter(s => s.status === 'completed').sort((a, b) => new Date(b.completed_at || b.scheduled_time) - new Date(a.completed_at || a.scheduled_time)));
+  const completedRequests = $derived(requests.filter(r => r.status === 'completed').sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at)));
 
   function getStatusBadge(status) {
     switch (status) {
@@ -74,46 +70,43 @@
     return new Date(timeStr).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   }
 
-  async function startSurgery(surgeryId) {
-    try {
-      const { error } = await supabase
-        .from('surgeries')
-        .update({ status: 'in_progress', started_at: new Date().toISOString() })
-        .eq('surgery_id', surgeryId);
-      if (error) throw error;
-      await fetchSurgeries();
-    } catch (err) {
-      console.error('Start surgery error:', err);
-    }
+  function getVisitStatus(v) {
+    if (v.status_keluar === '1') return { label: 'Selesai', class: 'badge-info' };
+    if (v.status_periksa === '1') return { label: 'Diperiksa', class: 'badge-success' };
+    return { label: 'Menunggu', class: 'badge-warning' };
   }
 
-  async function completeSurgery(surgeryId) {
-    try {
-      const { error } = await supabase
-        .from('surgeries')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('surgery_id', surgeryId);
-      if (error) throw error;
-      await fetchSurgeries();
-    } catch (err) {
-      console.error('Complete surgery error:', err);
-    }
+  function onSelectPatient() {
+    const v = visits.find(x => x.patient_id === newRequest.patient_id);
+    newRequest.visit_id = v?.visit_id || '';
+  }
+
+  function startRequestForVisit(v) {
+    newRequest = { ...newRequest, visit_id: v.visit_id, patient_id: v.patient_id };
+    activeTab = 'pengajuan';
+    showForm = true;
   }
 
   async function submitRequest() {
-    if (!newRequest.patient_id || !newRequest.procedure_name || !newRequest.requested_date) return;
+    if (!newRequest.visit_id || !newRequest.procedure_name || !newRequest.requested_date) return;
     saving = true;
     try {
       const { error } = await supabase.from('surgery_requests').insert({
-        ...newRequest,
-        request_id: generateId('SR'),
-        status: 'pending',
-        created_at: new Date().toISOString()
+        visit_id: newRequest.visit_id,
+        procedure_name: newRequest.procedure_name,
+        description: newRequest.description || null,
+        requested_date: newRequest.requested_date || null,
+        priority: newRequest.priority,
+        surgeon_id: newRequest.surgeon_id || null,
+        assistant_surgeon_id: newRequest.assistant || null,
+        anesthesia_type: newRequest.anesthesia_type,
+        status: 'pending'
       });
       if (error) throw error;
       showForm = false;
-      newRequest = { patient_id: '', procedure_name: '', description: '', priority: 'normal', requested_date: '', surgeon_id: '', assistant: '', anesthesia_type: 'umum' };
+      newRequest = { visit_id: '', patient_id: '', procedure_name: '', description: '', priority: 'normal', requested_date: '', surgeon_id: '', assistant: '', anesthesia_type: 'umum' };
       await fetchRequests();
+      await fetchVisits();
     } catch (err) {
       console.error('Submit request error:', err);
     } finally {
@@ -126,7 +119,7 @@
       const { error } = await supabase
         .from('surgery_requests')
         .update({ status: 'approved' })
-        .eq('request_id', requestId);
+        .eq('id', requestId);
       if (error) throw error;
       await fetchRequests();
     } catch (err) {
@@ -134,26 +127,56 @@
     }
   }
 
-  async function fetchSurgeries() {
+  async function fetchOkClinic() {
     try {
-      const { data, error } = await supabase
-        .from('surgeries')
-        .select(`
-          *,
-          patients:patient_id ( full_name, no_registration ),
-          doctors:surgeon_id ( full_name )
-        `)
-        .order('scheduled_time', { ascending: false })
-        .limit(100);
+      const { data, error } = await supabase.from('clinics').select('clinic_id, name').order('name');
       if (error) throw error;
-      surgeries = (data || []).map(s => ({
-        ...s,
-        patient_name: s.patients?.full_name || '-',
-        patient_no: s.patients?.no_registration || '-',
-        surgeon_name: s.doctors?.full_name || '-'
-      }));
+      const match = (data || []).find(c => c.clinic_id === 'POL-OK' || /operasi/i.test(c.name));
+      if (match) okClinicId = match.clinic_id;
     } catch (err) {
-      console.error('Fetch surgeries error:', err);
+      console.error('Fetch OK clinic error:', err);
+    }
+  }
+
+  async function fetchVisits() {
+    try {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const { data, error } = await supabase
+        .from('patient_visitations')
+        .select(`
+          visit_id,
+          visit_date,
+          ticket_no,
+          status_periksa,
+          status_keluar,
+          description,
+          patient_id,
+          doctor_id,
+          patients:patient_id ( full_name, no_registration ),
+          employees:doctor_id ( full_name )
+        `)
+        .eq('clinic_id', okClinicId)
+        .gte('visit_date', todayStart.toISOString())
+        .lte('visit_date', todayEnd.toISOString())
+        .order('visit_date', { ascending: true });
+
+      if (error) throw error;
+      visits = (data || []).map(v => {
+        const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
+        const employee = Array.isArray(v.employees) ? v.employees[0] : v.employees;
+        return {
+          ...v,
+          patient_name: patient?.full_name || '-',
+          patient_no: patient?.no_registration || '-',
+          doctor_name: employee?.full_name || '-'
+        };
+      });
+    } catch (err) {
+      console.error('Fetch visitasi poli operasi error:', err);
     }
   }
 
@@ -163,35 +186,34 @@
         .from('surgery_requests')
         .select(`
           *,
-          patients:patient_id ( full_name, no_registration ),
-          doctors:surgeon_id ( full_name )
+          employees:surgeon_id ( full_name ),
+          visitations:visit_id ( patients:patient_id ( full_name, no_registration ) )
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      requests = (data || []).map(r => ({
-        ...r,
-        patient_name: r.patients?.full_name || '-',
-        patient_no: r.patients?.no_registration || '-',
-        surgeon_name: r.doctors?.full_name || '-'
-      }));
+      requests = (data || []).map(r => {
+        const visitations = Array.isArray(r.visitations) ? r.visitations[0] : r.visitations;
+        const patient = Array.isArray(visitations?.patients) ? visitations.patients[0] : visitations?.patients;
+        const surgeon = Array.isArray(r.employees) ? r.employees[0] : r.employees;
+        return {
+          ...r,
+          patient_name: patient?.full_name || '-',
+          patient_no: patient?.no_registration || '-',
+          surgeon_name: surgeon?.full_name || '-'
+        };
+      });
     } catch (err) {
       console.error('Fetch requests error:', err);
     }
   }
 
-  async function fetchPatients() {
-    try {
-      const { data, error } = await supabase.from('patients').select('patient_id, full_name, no_registration').order('full_name');
-      if (error) throw error;
-      patients = data || [];
-    } catch (err) {
-      console.error('Fetch patients error:', err);
-    }
-  }
-
   async function fetchDoctors() {
     try {
-      const { data, error } = await supabase.from('doctors').select('doctor_id, full_name, specialization').order('full_name');
+      const { data, error } = await supabase
+        .from('employees')
+        .select('employee_id, full_name, specialization')
+        .eq('is_active', true)
+        .order('full_name');
       if (error) throw error;
       doctors = data || [];
     } catch (err) {
@@ -201,7 +223,8 @@
 
   async function refreshAll() {
     loading = true;
-    await Promise.all([fetchSurgeries(), fetchRequests(), fetchPatients(), fetchDoctors()]);
+    await fetchOkClinic();
+    await Promise.all([fetchVisits(), fetchRequests(), fetchDoctors()]);
     loading = false;
   }
 
@@ -239,24 +262,24 @@
 
   <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
     <div class="card p-4">
-      <p class="text-xs text-gray-500 uppercase tracking-wide font-medium">Total</p>
+      <p class="text-xs text-gray-500 uppercase tracking-wide font-medium">Total Pasien</p>
       <p class="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
     </div>
     <div class="card p-4 border-blue-200 bg-blue-50">
-      <p class="text-xs text-blue-700 uppercase tracking-wide font-medium">Terjadwal</p>
-      <p class="text-2xl font-bold text-blue-700 mt-1">{stats.scheduled}</p>
+      <p class="text-xs text-blue-700 uppercase tracking-wide font-medium">Menunggu</p>
+      <p class="text-2xl font-bold text-blue-700 mt-1">{stats.menunggu}</p>
     </div>
     <div class="card p-4 border-amber-200 bg-amber-50">
-      <p class="text-xs text-amber-700 uppercase tracking-wide font-medium">Berlangsung</p>
-      <p class="text-2xl font-bold text-amber-700 mt-1">{stats.inProgress}</p>
+      <p class="text-xs text-amber-700 uppercase tracking-wide font-medium">Diperiksa</p>
+      <p class="text-2xl font-bold text-amber-700 mt-1">{stats.diperiksa}</p>
     </div>
     <div class="card p-4 border-emerald-200 bg-emerald-50">
       <p class="text-xs text-emerald-700 uppercase tracking-wide font-medium">Selesai</p>
-      <p class="text-2xl font-bold text-emerald-700 mt-1">{stats.completed}</p>
+      <p class="text-2xl font-bold text-emerald-700 mt-1">{stats.selesai}</p>
     </div>
     <div class="card p-4 border-red-200 bg-red-50">
-      <p class="text-xs text-red-700 uppercase tracking-wide font-medium">Dibatalkan</p>
-      <p class="text-2xl font-bold text-red-700 mt-1">{stats.cancelled}</p>
+      <p class="text-xs text-red-700 uppercase tracking-wide font-medium">Pengajuan</p>
+      <p class="text-2xl font-bold text-red-700 mt-1">{stats.pengajuan}</p>
     </div>
   </div>
 
@@ -292,23 +315,24 @@
       <div class="flex items-center justify-center py-16">
         <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
       </div>
-    {:else if todaySurgeries.length === 0}
+    {:else if todayVisits.length === 0}
       <div class="card text-center py-16">
         <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
         </svg>
-        <p class="text-lg font-medium text-gray-500">Tidak ada jadwal operasi hari ini</p>
+        <p class="text-lg font-medium text-gray-500">Tidak ada pasien terdaftar di Poli Operasi hari ini</p>
+        <p class="text-sm text-gray-400 mt-1">Pasien yang didaftarkan lewat registrasi dengan poli Kamar Operasi akan muncul di sini</p>
       </div>
     {:else}
       <div class="space-y-4">
-        {#each todaySurgeries as surgery}
-          {@const statusBadge = getStatusBadge(surgery.status)}
+        {#each todayVisits as visit}
+          {@const visitStatus = getVisitStatus(visit)}
           <div class="card p-4">
             <div class="flex flex-col lg:flex-row lg:items-center gap-4">
               <div class="flex items-center gap-3 lg:w-48 shrink-0">
                 <div class="text-center">
-                  <p class="text-2xl font-bold text-indigo-700">{getScheduleTime(surgery.scheduled_time)}</p>
-                  <p class="text-xs text-gray-500">{surgery.room_name || 'OK-'}</p>
+                  <p class="text-2xl font-bold text-indigo-700">{getScheduleTime(visit.visit_date)}</p>
+                  <p class="text-xs text-gray-500">Antrian {visit.ticket_no || '-'}</p>
                 </div>
                 <div class="w-px h-12 bg-gray-200 hidden lg:block"></div>
               </div>
@@ -316,54 +340,37 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between gap-2 mb-2">
                   <div>
-                    <h3 class="font-semibold text-gray-900">{surgery.procedure_name}</h3>
-                    <p class="text-sm text-gray-500">{surgery.patient_name} &middot; {surgery.patient_no}</p>
+                    <h3 class="font-semibold text-gray-900">{visit.patient_name}</h3>
+                    <p class="text-sm text-gray-500">{visit.patient_no}</p>
                   </div>
-                  <span class="badge {statusBadge.class} shrink-0">{statusBadge.label}</span>
+                  <span class="badge {visitStatus.class} shrink-0">{visitStatus.label}</span>
                 </div>
                 <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                   <span class="flex items-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                     </svg>
-                    {surgery.surgeon_name}
+                    {visit.doctor_name || '-'}
                   </span>
-                  {#if s.room_name}
-                    <span class="flex items-center gap-1">
-                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
-                      </svg>
-                      {surgery.room_name || '-'}
-                    </span>
-                  {/if}
                   <span class="flex items-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
                     </svg>
-                    Anestesi: {surgery.anesthesia_type || '-'}
+                    Poli Operasi
                   </span>
                 </div>
-                {#if surgery.description}
-                  <p class="text-xs text-gray-400 mt-2 italic">{surgery.description}</p>
+                {#if visit.description}
+                  <p class="text-xs text-gray-400 mt-2 italic">{visit.description}</p>
                 {/if}
               </div>
 
               <div class="flex gap-2 shrink-0">
-                {#if surgery.status === 'scheduled'}
-                  <button class="btn-success btn-sm text-xs" onclick={() => startSurgery(surgery.surgery_id)}>
-                    <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-                    </svg>
-                    Mulai Operasi
-                  </button>
-                {:else if surgery.status === 'in_progress'}
-                  <button class="btn-primary btn-sm text-xs" onclick={() => completeSurgery(surgery.surgery_id)}>
-                    <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                    </svg>
-                    Selesai
-                  </button>
-                {/if}
+                <button class="btn-primary btn-sm text-xs" onclick={() => startRequestForVisit(visit)}>
+                  <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Ajukan Operasi
+                </button>
               </div>
             </div>
           </div>
@@ -388,12 +395,15 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="label">Pasien *</label>
-            <select class="select-field" bind:value={newRequest.patient_id}>
+            <select class="select-field" bind:value={newRequest.patient_id} onchange={onSelectPatient}>
               <option value="">Pilih Pasien</option>
-              {#each patients as p}
-                <option value={p.patient_id}>{p.full_name} ({p.no_registration})</option>
+              {#each visits as v}
+                <option value={v.patient_id}>{v.patient_name} ({v.patient_no})</option>
               {/each}
             </select>
+            {#if newRequest.patient_id && !newRequest.visit_id}
+              <p class="text-xs text-red-500 mt-1">Pasien tidak ditemukan dalam daftar registrasi hari ini</p>
+            {/if}
           </div>
           <div>
             <label class="label">Prosedur *</label>
@@ -420,13 +430,18 @@
             <select class="select-field" bind:value={newRequest.surgeon_id}>
               <option value="">Pilih Dokter</option>
               {#each doctors as d}
-                <option value={d.doctor_id}>{d.full_name} ({d.specialization || '-'})</option>
+                <option value={d.employee_id}>{d.full_name} ({d.specialization || '-'})</option>
               {/each}
             </select>
           </div>
           <div>
             <label class="label">Asisten</label>
-            <input type="text" class="input-field" placeholder="Nama asisten" bind:value={newRequest.assistant} />
+            <select class="select-field" bind:value={newRequest.assistant}>
+              <option value="">Pilih Asisten</option>
+              {#each doctors as d}
+                <option value={d.employee_id}>{d.full_name} ({d.specialization || '-'})</option>
+              {/each}
+            </select>
           </div>
           <div>
             <label class="label">Jenis Anestesi</label>
@@ -492,7 +507,7 @@
                   </td>
                   <td class="table-cell text-right">
                     {#if req.status === 'pending'}
-                      <button class="btn-success btn-sm text-xs" onclick={() => approveRequest(req.request_id)}>Setuju</button>
+                      <button class="btn-success btn-sm text-xs" onclick={() => approveRequest(req.id)}>Setuju</button>
                     {/if}
                   </td>
                 </tr>
@@ -510,7 +525,7 @@
           <div class="flex items-center justify-center py-16">
             <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
           </div>
-        {:else if completedSurgeries.length === 0}
+        {:else if completedRequests.length === 0}
           <div class="text-center py-16 text-gray-400">
             <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
@@ -530,17 +545,17 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              {#each completedSurgeries as s, i}
-                {@const statusBadge = getStatusBadge(s.status)}
+              {#each completedRequests as r, i}
+                {@const statusBadge = getStatusBadge(r.status)}
                 <tr class="hover:bg-gray-50 transition-colors">
                   <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                   <td class="table-cell">
-                    <p class="font-medium text-gray-900">{s.patient_name}</p>
-                    <p class="text-xs text-gray-400 font-mono">{s.patient_no}</p>
+                    <p class="font-medium text-gray-900">{r.patient_name}</p>
+                    <p class="text-xs text-gray-400 font-mono">{r.patient_no}</p>
                   </td>
-                  <td class="table-cell text-gray-600">{s.procedure_name}</td>
-                  <td class="table-cell text-gray-600 hidden md:table-cell">{s.surgeon_name}</td>
-                  <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">{formatDateTime(s.completed_at || s.scheduled_time)}</td>
+                  <td class="table-cell text-gray-600">{r.procedure_name}</td>
+                  <td class="table-cell text-gray-600 hidden md:table-cell">{r.surgeon_name}</td>
+                  <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">{formatDateTime(r.updated_at || r.created_at)}</td>
                   <td class="table-cell">
                     <span class="badge {statusBadge.class}">{statusBadge.label}</span>
                   </td>
