@@ -36,6 +36,21 @@
     return map[status] || { label: status, class: 'badge-gray' };
   }
 
+  async function attachAnalysis(orders) {
+    const ids = orders.map(o => o.id);
+    if (ids.length === 0) return orders;
+    const { data, error } = await supabase
+      .from('lab_analysis')
+      .select('*')
+      .in('lab_order_id', ids);
+    if (error) throw error;
+    const grouped = (data || []).reduce((acc, item) => {
+      (acc[item.lab_order_id] = acc[item.lab_order_id] || []).push(item);
+      return acc;
+    }, {});
+    return orders.map(o => ({ ...o, analysis_items: grouped[o.id] || [] }));
+  }
+
   async function fetchOrders() {
     try {
       const { data, error } = await supabase
@@ -52,7 +67,8 @@
         .in('status', ['ordered', 'in_progress'])
         .order('order_date', { ascending: false });
       if (error) throw error;
-      orders = (data || []).map(o => ({
+      const withAnalysis = await attachAnalysis(data || []);
+      orders = withAnalysis.map(o => ({
         ...o,
         patient_name: o.patient_visitations?.patients?.full_name || '-',
         no_rm: o.patient_visitations?.patients?.no_registration || '-',
@@ -81,7 +97,8 @@
         .eq('status', 'completed')
         .order('completed_at', { ascending: false });
       if (error) throw error;
-      completedOrders = (data || []).map(o => ({
+      const withAnalysis = await attachAnalysis(data || []);
+      completedOrders = withAnalysis.map(o => ({
         ...o,
         patient_name: o.patient_visitations?.patients?.full_name || '-',
         no_rm: o.patient_visitations?.patients?.no_registration || '-',
@@ -111,18 +128,55 @@
 
   function openInputHasil(order) {
     selectedOrder = order;
-    const items = order.items || order.analysis_items || [];
+    const items = order.analysis_items || [];
     resultItems = items.map(item => ({
       id: item.id || null,
-      name: item.name || item.nama_pemeriksaan || '-',
-      category: item.category || item.kategori || '-',
-      normal_value: item.normal_value || item.nilai_normal || '-',
+      name: item.analysis_name || item.name || '-',
+      category: item.category || '-',
+      normal_value: item.normal_value || '',
       result: item.result || '',
-      unit: item.unit || item.satuan || '-',
-      method: item.method || item.metode || '-',
+      unit: item.unit || '',
+      method: item.method || '',
       is_abnormal: false
     }));
+    if (resultItems.length === 0 && order.test_name) {
+      resultItems.push({
+        id: null,
+        name: order.test_name,
+        category: order.category || '-',
+        normal_value: '',
+        result: '',
+        unit: '',
+        method: '',
+        is_abnormal: false
+      });
+    }
     activeTab = 'input_hasil';
+  }
+
+  function addResultItem() {
+    resultItems.push({
+      id: null,
+      name: '',
+      category: '-',
+      normal_value: '',
+      result: '',
+      unit: '',
+      method: '',
+      is_abnormal: false
+    });
+  }
+
+  function removeResultItem(index) {
+    const item = resultItems[index];
+    if (item?.id) {
+      supabase
+        .from('lab_analysis')
+        .delete()
+        .eq('id', item.id)
+        .then(({ error }) => { if (error) console.error('Delete analysis item error:', error); });
+    }
+    resultItems = resultItems.filter((_, i) => i !== index);
   }
 
   function checkAbnormal(item) {
@@ -147,36 +201,47 @@
     if (!selectedOrder) return;
     saving = true;
     try {
-      const { error: updateError } = await supabase
-        .from('lab_orders')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', selectedOrder.id);
-      if (updateError) throw updateError;
-
+      const savedItems = [];
       for (const item of resultItems) {
+        if (!item.name || item.name === '-') continue;
+        const payload = {
+          lab_order_id: selectedOrder.id,
+          analysis_name: item.name,
+          category: item.category || null,
+          normal_value: item.normal_value || null,
+          result: item.result || null,
+          unit: item.unit || null,
+          method: item.method || null,
+          flag: checkAbnormal(item) ? 'H' : 'L'
+        };
         if (item.id) {
-          await supabase
-            .from('lab_order_items')
-            .update({
-              result: item.result,
-              is_abnormal: checkAbnormal(item)
-            })
-            .eq('id', item.id);
+          const { data, error } = await supabase
+            .from('lab_analysis')
+            .update(payload)
+            .eq('id', item.id)
+            .select('id, analysis_name, result');
+          if (error) throw error;
+          savedItems.push(...(data || []));
         } else {
-          await supabase
-            .from('lab_order_items')
-            .insert({
-              order_id: selectedOrder.id,
-              name: item.name,
-              category: item.category,
-              normal_value: item.normal_value,
-              result: item.result,
-              unit: item.unit,
-              method: item.method,
-              is_abnormal: checkAbnormal(item)
-            });
+          const { data, error } = await supabase
+            .from('lab_analysis')
+            .insert(payload)
+            .select('id, analysis_name, result');
+          if (error) throw error;
+          savedItems.push(...(data || []));
         }
       }
+
+      const summary = savedItems
+        .filter(i => i.result)
+        .map(i => `${i.analysis_name}: ${i.result}`)
+        .join(' | ');
+
+      const { error: updateError } = await supabase
+        .from('lab_orders')
+        .update({ status: 'completed', completed_at: new Date().toISOString(), results: summary || null })
+        .eq('id', selectedOrder.id);
+      if (updateError) throw updateError;
 
       selectedOrder = null;
       resultItems = [];
@@ -352,7 +417,7 @@
                 <tbody class="divide-y divide-gray-100">
                   {#each orders as order, i}
                     {@const status = getStatusBadge(order.status)}
-                    {@const itemCount = order.items?.length || order.analysis_items?.length || 0}
+                    {@const itemCount = order.analysis_items?.length || (order.test_name ? 1 : 0)}
                     <tr class="hover:bg-gray-50 transition-colors">
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">
@@ -430,8 +495,20 @@
               </div>
             </div>
 
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm text-gray-500">
+                {resultItems.length} pemeriksaan - isi kolom "Hasil" untuk menyimpan
+              </p>
+              <button class="btn-secondary btn-sm text-xs" onclick={addResultItem}>
+                <svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Tambah Pemeriksaan
+              </button>
+            </div>
+
             <div class="overflow-x-auto">
-              <table class="w-full">
+              <table class="w-full min-w-[720px]">
                 <thead>
                   <tr class="table-header">
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-10">#</th>
@@ -441,6 +518,7 @@
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Hasil</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Satuan</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Metode</th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -448,11 +526,30 @@
                     {@const abnormal = checkAbnormal(item)}
                     <tr class="hover:bg-gray-50 transition-colors">
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
-                      <td class="table-cell font-medium text-gray-900">{item.name}</td>
-                      <td class="table-cell hidden md:table-cell">
-                        <span class="badge badge-gray">{item.category}</span>
+                      <td class="table-cell">
+                        <input
+                          type="text"
+                          class="input-field text-sm w-full min-w-[140px]"
+                          bind:value={item.name}
+                          placeholder="Nama pemeriksaan"
+                        />
                       </td>
-                      <td class="table-cell text-gray-500 text-xs hidden lg:table-cell">{item.normal_value}</td>
+                      <td class="table-cell hidden md:table-cell">
+                        <select class="select-field text-sm py-1.5" bind:value={item.category}>
+                          <option value="-">-</option>
+                          {#each LAB_CATEGORIES as cat}
+                            <option value={cat}>{cat}</option>
+                          {/each}
+                        </select>
+                      </td>
+                      <td class="table-cell hidden lg:table-cell">
+                        <input
+                          type="text"
+                          class="input-field text-sm w-full min-w-[110px]"
+                          bind:value={item.normal_value}
+                          placeholder="cth: 12-16"
+                        />
+                      </td>
                       <td class="table-cell">
                         <input
                           type="text"
@@ -464,8 +561,33 @@
                           <span class="text-[10px] text-red-600 font-semibold mt-0.5 block">Abnormal</span>
                         {/if}
                       </td>
-                      <td class="table-cell text-gray-500 text-xs hidden md:table-cell">{item.unit}</td>
-                      <td class="table-cell text-gray-500 text-xs hidden lg:table-cell">{item.method}</td>
+                      <td class="table-cell hidden md:table-cell">
+                        <input
+                          type="text"
+                          class="input-field text-sm w-full max-w-[100px]"
+                          bind:value={item.unit}
+                          placeholder="cth: g/dL"
+                        />
+                      </td>
+                      <td class="table-cell hidden lg:table-cell">
+                        <input
+                          type="text"
+                          class="input-field text-sm w-full min-w-[120px]"
+                          bind:value={item.method}
+                          placeholder="cth: fotometri"
+                        />
+                      </td>
+                      <td class="table-cell text-right">
+                        <button
+                          class="text-gray-400 hover:text-red-500 transition-colors"
+                          onclick={() => removeResultItem(i)}
+                          title="Hapus pemeriksaan"
+                        >
+                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </td>
                     </tr>
                   {/each}
                 </tbody>
@@ -483,7 +605,7 @@
               <button
                 class="btn-primary"
                 onclick={saveResults}
-                disabled={saving || resultItems.every(it => !it.result.trim())}
+                disabled={saving || resultItems.length === 0 || resultItems.every(it => !it.result.trim())}
               >
                 {#if saving}
                   <span class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></span>
@@ -530,7 +652,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   {#each completedOrders as order, i}
-                    {@const itemCount = order.items?.length || order.analysis_items?.length || 0}
+                    {@const itemCount = order.analysis_items?.length || (order.test_name ? 1 : 0)}
                     <tr class="hover:bg-gray-50 transition-colors">
                       <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                       <td class="table-cell">

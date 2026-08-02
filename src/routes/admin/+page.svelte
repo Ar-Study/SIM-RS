@@ -42,8 +42,8 @@
 
   const filteredEmployees = $derived(
   searchQuery
-    ? employees.filter(e =>
-        e.fullname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ? employees.filter(e =>
+          e.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         e.employee_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         e.role?.toLowerCase().includes(searchQuery.toLowerCase())
       )
@@ -117,7 +117,7 @@
   const filteredProfiles = $derived(
     searchQuery
       ? profiles.filter(p =>
-          p.fullname?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.role?.toLowerCase().includes(searchQuery.toLowerCase())
         )
@@ -158,20 +158,15 @@
     try {
       // 1. Fetch data Karyawan
       const empRes = await supabase.from('employees').select('*');
-      
-      // DEBUG: Cek isi objek response dari Supabase di konsol browser
-      console.log('Respon Karyawan:', { data: empRes.data, error: empRes.error });
 
       if (empRes.error) {
         console.error('Error Employees:', empRes.error.message);
       }
-      
+
       if (empRes.data) {
-        // Sort langsung di tempat (inline) menggunakan kolom 'fullname' yang baru
-        employees = [...empRes.data].sort((a, b) => 
-          (a.fullname || '').toString().localeCompare((b.fullname || '').toString(), 'id')
+        employees = [...empRes.data].sort((a, b) =>
+          (a.full_name || '').toString().localeCompare((b.full_name || '').toString(), 'id')
         );
-        console.log('State employees setelah di-assign:', employees);
       }
 
       // 2. Fetch data Poli
@@ -285,7 +280,7 @@
       case 'karyawan':
         return {
           employee_id: generateId('EMP'),
-          fullname: '',
+          full_name: '',
           role: 'doctor',
           gender: '',
           phone: '',
@@ -311,7 +306,7 @@
       case 'diagnosis':
         return { diagnosis_id: generateId('DX'), code: '', name: '', description: '', category: '' };
       case 'profil':
-        return { fullname: '', email: '', password: 'Password123!', role: 'doctor', phone: '' };
+        return { full_name: '', email: '', password: 'Password123!', role: 'doctor', phone: '' };
       default:
         return {};
     }
@@ -321,7 +316,7 @@
     const errors = {};
     switch (modalEntity) {
       case 'karyawan':
-        if (!formData.fullname?.trim()) errors.fullname = 'Nama wajib diisi';
+        if (!formData.full_name?.trim()) errors.full_name = 'Nama wajib diisi';
         if (!formData.role) errors.role = 'Role wajib dipilih';
         if (formData.gender && !['L', 'P'].includes(formData.gender)) errors.gender = 'Gender tidak valid';
         if (!formData.phone?.trim()) errors.phone = 'Telepon wajib diisi';
@@ -358,7 +353,7 @@
         if (!formData.name?.trim()) errors.name = 'Nama diagnosis wajib diisi';
         break;
       case 'profil':
-        if (!formData.fullname?.trim()) errors.fullname = 'Nama wajib diisi';
+        if (!formData.full_name?.trim()) errors.full_name = 'Nama wajib diisi';
         if (modalMode === 'add') {
           if (!formData.email?.trim()) errors.email = 'Email wajib diisi';
           if (!formData.password?.trim()) errors.password = 'Password wajib diisi';
@@ -394,7 +389,7 @@
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password || 'Password123!',
-          options: { data: { fullname: formData.fullname, role: formData.role } }
+          options: { data: { full_name: formData.full_name, role: formData.role } }
         });
         if (signUpError) throw signUpError;
         if (!signUpData.user) throw new Error('Gagal membuat user');
@@ -409,7 +404,7 @@
 
         const { error: profileError } = await supabase.from('profiles').insert({
           id: signUpData.user.id,
-          fullname: formData.fullname,
+          full_name: formData.full_name,
           email: formData.email,
           phone: formData.phone || null,
           role: formData.role,
@@ -680,7 +675,7 @@
         <!-- ===================== KARYAWAN TAB ===================== -->
         {#if activeTab === 'karyawan'}
           <div class="overflow-x-auto">
-            <table class="w-full">
+            <table class="w-full min-w-[640px]">
               <thead>
                 <tr class="table-header">
                   <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
@@ -748,7 +743,7 @@
         <!-- ===================== POLI TAB ===================== -->
         {:else if activeTab === 'poli'}
           <div class="overflow-x-auto">
-            <table class="w-full">
+            <table class="w-full min-w-[560px]">
               <thead>
                 <tr class="table-header">
                   <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
@@ -812,7 +807,7 @@
                 Kelas Kamar
               </h3>
               <div class="overflow-x-auto">
-                <table class="w-full">
+                <table class="w-full min-w-[560px]">
                   <thead>
                     <tr class="table-header">
                       <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
@@ -863,7 +858,7 @@
                 Daftar Kamar
               </h3>
               <div class="overflow-x-auto">
-                <table class="w-full">
+                <table class="w-full min-w-[640px]">
                   <thead>
                     <tr class="table-header">
                       <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
@@ -922,7 +917,7 @@
                 Daftar Bed
               </h3>
               <div class="overflow-x-auto">
-                <table class="w-full">
+                <table class="w-full min-w-[640px]">
                   <thead>
                     <tr class="table-header">
                       <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
@@ -978,7 +973,7 @@
         <!-- ===================== OBAT TAB ===================== -->
         {:else if activeTab === 'obat'}
           <div class="overflow-x-auto">
-            <table class="w-full">
+            <table class="w-full min-w-[720px]">
               <thead>
                 <tr class="table-header">
                   <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
@@ -1040,7 +1035,7 @@
         <!-- ===================== TARIF TAB ===================== -->
         {:else if activeTab === 'tarif'}
           <div class="overflow-x-auto">
-            <table class="w-full">
+            <table class="w-full min-w-[640px]">
               <thead>
                 <tr class="table-header">
                   <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
@@ -1101,7 +1096,7 @@
         <!-- ===================== DIAGNOSIS TAB ===================== -->
         {:else if activeTab === 'diagnosis'}
           <div class="overflow-x-auto">
-            <table class="w-full">
+            <table class="w-full min-w-[640px]">
               <thead>
                 <tr class="table-header">
                   <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Kode ICD</th>
@@ -1157,7 +1152,7 @@
         <!-- ===================== USER/PROFIL TAB ===================== -->
         {:else if activeTab === 'profil'}
           <div class="overflow-x-auto">
-            <table class="w-full">
+            <table class="w-full min-w-[640px]">
               <thead>
                 <tr class="table-header">
                   <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>

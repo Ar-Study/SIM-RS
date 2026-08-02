@@ -8,6 +8,8 @@
   let activeTab = $state('pasien');
 
   let patients = $state([]);
+  let patientList = $state([]);
+  let ancVisits = $state([]);
   let visits = $state([]);
   let doctors = $state([]);
   let searchQuery = $state('');
@@ -87,7 +89,7 @@
       if (error) throw error;
       showForm = false;
       newANC = { patient_id: '', visit_date: '', gestational_age: '', blood_pressure: '', weight: '', fundal_height: '', fetal_heart_rate: '', notes: '', doctor_id: '' };
-      await fetchPatients();
+      await Promise.all([fetchPatients(), fetchAncVisits()]);
     } catch (err) {
       console.error('Submit ANC error:', err);
     } finally {
@@ -104,7 +106,6 @@
           visit_date,
           patient_id,
           doctor_id,
-          diagnosis,
           patients:patient_id ( full_name, no_registration, date_of_birth, gender ),
           doctors:doctor_id ( full_name )
         `)
@@ -130,9 +131,27 @@
     }
   }
 
+  async function fetchPatientList() {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('patient_id, full_name, no_registration')
+        .order('full_name');
+      if (error) throw error;
+      patientList = data || [];
+    } catch (err) {
+      console.error('Fetch patient list error:', err);
+    }
+  }
+
   async function fetchDoctors() {
     try {
-      const { data, error } = await supabase.from('doctors').select('doctor_id, full_name, specialization').order('full_name');
+      const { data, error } = await supabase
+        .from('employees')
+        .select('employee_id, full_name, specialization')
+        .eq('role', 'doctor')
+        .eq('is_active', true)
+        .order('full_name');
       if (error) throw error;
       doctors = data || [];
     } catch (err) {
@@ -140,9 +159,31 @@
     }
   }
 
+  async function fetchAncVisits() {
+    try {
+      const { data, error } = await supabase
+        .from('anc_visits')
+        .select(`
+          *,
+          patients:patient_id ( full_name, no_registration ),
+          employees:doctor_id ( full_name )
+        `)
+        .order('visit_date', { ascending: false });
+      if (error) throw error;
+      ancVisits = (data || []).map(a => ({
+        ...a,
+        patient_name: a.patients?.full_name || '-',
+        patient_no: a.patients?.no_registration || '-',
+        doctor_name: a.employees?.full_name || '-'
+      }));
+    } catch (err) {
+      console.error('Fetch ANC visits error:', err);
+    }
+  }
+
   async function refreshAll() {
     loading = true;
-    await Promise.all([fetchPatients(), fetchDoctors()]);
+    await Promise.all([fetchPatients(), fetchPatientList(), fetchDoctors(), fetchAncVisits()]);
     loading = false;
   }
 
@@ -336,7 +377,7 @@
             <label class="label">Pasien *</label>
             <select class="select-field" bind:value={newANC.patient_id}>
               <option value="">Pilih Pasien</option>
-              {#each patients as p}
+              {#each patientList as p}
                 <option value={p.patient_id}>{p.full_name} ({p.no_registration})</option>
               {/each}
             </select>
@@ -370,7 +411,7 @@
             <select class="select-field" bind:value={newANC.doctor_id}>
               <option value="">Pilih Dokter</option>
               {#each doctors as d}
-                <option value={d.doctor_id}>{d.full_name}</option>
+                <option value={d.employee_id}>{d.full_name}</option>
               {/each}
             </select>
           </div>
@@ -389,11 +430,53 @@
     {/if}
 
     <div class="card">
-      <div class="text-center py-16 text-gray-400">
-        <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-        </svg>
-        <p class="text-lg font-medium">Riwayat kunjungan ANC akan muncul di sini</p>
+      <div class="overflow-x-auto">
+        {#if ancVisits.length === 0}
+          <div class="text-center py-16 text-gray-400">
+            <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+            <p class="text-lg font-medium">Belum ada kunjungan ANC</p>
+            <p class="text-sm mt-1">Klik "Kunjungan ANC Baru" untuk mencatat kunjungan pertama</p>
+          </div>
+        {:else}
+          <table class="w-full">
+            <thead>
+              <tr class="table-header">
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-10">#</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">No.RM</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nama</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">Tgl</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Usia Hamil</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">TD</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">BB (kg)</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">TFU (cm)</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">DJJ</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden xl:table-cell">Dokter</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {#each ancVisits as a, i}
+                <tr class="hover:bg-gray-50 transition-colors">
+                  <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
+                  <td class="table-cell">
+                    <span class="font-mono text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">{a.patient_no}</span>
+                  </td>
+                  <td class="table-cell">
+                    <p class="font-medium text-gray-900">{a.patient_name}</p>
+                  </td>
+                  <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">{formatDate(a.visit_date)}</td>
+                  <td class="table-cell text-gray-600 hidden md:table-cell">{a.gestational_age ? `${a.gestational_age} mgg` : '-'}</td>
+                  <td class="table-cell text-gray-600 hidden md:table-cell">{a.blood_pressure || '-'}</td>
+                  <td class="table-cell text-gray-600 hidden lg:table-cell">{a.weight ?? '-'}</td>
+                  <td class="table-cell text-gray-600 hidden lg:table-cell">{a.fundal_height ?? '-'}</td>
+                  <td class="table-cell text-gray-600 hidden lg:table-cell">{a.fetal_heart_rate ?? '-'}</td>
+                  <td class="table-cell text-gray-600 hidden xl:table-cell">{a.doctor_name}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
       </div>
     </div>
 

@@ -65,6 +65,7 @@
         return {
           ...b,
           bed_no: b.bed_number,
+          status: b.is_occupied ? 'occupied' : 'empty',
           rooms: room
             ? { ...room, name: room.room_number, class: roomClass?.name || '-' }
             : room
@@ -85,7 +86,6 @@
           patient_id,
           room_id,
           doctor_id,
-          diagnosis,
           patients:patient_id ( full_name, no_registration, date_of_birth ),
           rooms:room_id ( room_number, room_classes:class_id ( name ) ),
           doctors:doctor_id ( full_name )

@@ -2,20 +2,22 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime, generateId } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
 
   let loading = $state(true);
   let activeTab = $state('jadwal');
 
-  let surgeries = $state([]);
-  let patients = $state([]);
+  let bookings = $state([]);
+  let visits = $state([]);
   let doctors = $state([]);
   let rooms = $state([]);
+  let okClinicId = $state('POL-OK');
 
   let showForm = $state(false);
   let saving = $state(false);
 
   let newSurgery = $state({
+    visit_id: '',
     patient_id: '',
     procedure_name: '',
     description: '',
@@ -27,28 +29,26 @@
   });
 
   const stats = $derived({
-    total: surgeries.length,
-    scheduled: surgeries.filter(s => s.status === 'scheduled').length,
-    inProgress: surgeries.filter(s => s.status === 'in_progress').length,
-    recovery: surgeries.filter(s => s.status === 'recovery').length,
-    discharged: surgeries.filter(s => s.status === 'completed').length
+    total: bookings.length,
+    scheduled: bookings.filter(s => s.status === 'scheduled').length,
+    inProgress: bookings.filter(s => s.status === 'in_progress').length,
+    completedToday: bookings.filter(s => s.status === 'completed' && new Date(s.actual_end || s.scheduled_date).toDateString() === new Date().toDateString()).length
   });
 
   const todaySchedule = $derived.by(() => {
     const today = new Date().toDateString();
-    return surgeries.filter(s => {
-      const d = new Date(s.scheduled_time);
+    return bookings.filter(s => {
+      const d = new Date(s.scheduled_date);
       return d.toDateString() === today;
-    }).sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time));
+    }).sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));
   });
 
-  const completedToday = $derived(surgeries.filter(s => s.status === 'completed' && new Date(s.completed_at || s.scheduled_time).toDateString() === new Date().toDateString()));
+  const completedToday = $derived(bookings.filter(s => s.status === 'completed' && new Date(s.actual_end || s.scheduled_date).toDateString() === new Date().toDateString()));
 
   function getStatusBadge(status) {
     switch (status) {
       case 'scheduled': return { label: 'Terjadwal', class: 'badge-info', color: 'border-blue-300 bg-blue-50' };
       case 'in_progress': return { label: 'Operasi', class: 'badge-warning', color: 'border-amber-300 bg-amber-50' };
-      case 'recovery': return { label: 'Recovery', class: 'badge-warning', color: 'border-purple-300 bg-purple-50' };
       case 'completed': return { label: 'Selesai', class: 'badge-success', color: 'border-emerald-300 bg-emerald-50' };
       case 'cancelled': return { label: 'Dibatalkan', class: 'badge-danger', color: 'border-red-300 bg-red-50' };
       default: return { label: status, class: 'badge-gray', color: 'border-gray-300 bg-gray-50' };
@@ -56,7 +56,7 @@
   }
 
   function getFlowStep(status) {
-    const steps = ['admission', 'scheduled', 'in_progress', 'recovery', 'completed'];
+    const steps = ['scheduled', 'in_progress', 'completed'];
     const current = steps.indexOf(status);
     return { current, total: steps.length };
   }
@@ -66,35 +66,64 @@
     return new Date(timeStr).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   }
 
-  async function advanceStatus(surgeryId, currentStatus) {
-    const nextStatus = { scheduled: 'in_progress', in_progress: 'recovery', recovery: 'completed' };
+  function onSelectPatient() {
+    const v = visits.find(x => x.patient_id === newSurgery.patient_id);
+    newSurgery.visit_id = v?.visit_id || '';
+  }
+
+  async function advanceStatus(bookingId, currentStatus) {
+    const nextStatus = { scheduled: 'in_progress', in_progress: 'completed' };
     const next = nextStatus[currentStatus];
     if (!next) return;
     try {
       const update = { status: next };
-      if (next === 'completed') update.completed_at = new Date().toISOString();
-      const { error } = await supabase.from('surgeries').update(update).eq('surgery_id', surgeryId);
+      if (next === 'in_progress') update.actual_start = new Date().toISOString();
+      if (next === 'completed') update.actual_end = new Date().toISOString();
+      const { data, error } = await supabase.from('surgery_bookings').update(update).eq('id', bookingId).select('surgery_request_id');
       if (error) throw error;
-      await fetchSurgeries();
+      if (data?.[0]?.surgery_request_id) {
+        await supabase.from('surgery_requests').update({ status: next }).eq('id', data[0].surgery_request_id);
+      }
+      await fetchBookings();
     } catch (err) {
       console.error('Advance status error:', err);
     }
   }
 
   async function submitSurgery() {
-    if (!newSurgery.patient_id || !newSurgery.procedure_name || !newSurgery.scheduled_time) return;
+    if (!newSurgery.visit_id || !newSurgery.procedure_name || !newSurgery.scheduled_time) return;
     saving = true;
     try {
-      const { error } = await supabase.from('surgeries').insert({
-        surgery_id: generateId('OP'),
-        ...newSurgery,
-        status: 'scheduled',
-        created_at: new Date().toISOString()
-      });
-      if (error) throw error;
+      const { data: reqData, error: reqError } = await supabase
+        .from('surgery_requests')
+        .insert({
+          visit_id: newSurgery.visit_id,
+          procedure_name: newSurgery.procedure_name,
+          description: newSurgery.description || null,
+          requested_date: new Date().toISOString().slice(0, 10),
+          priority: newSurgery.priority,
+          surgeon_id: newSurgery.surgeon_id || null,
+          anesthesia_type: newSurgery.anesthesia_type,
+          status: 'approved'
+        })
+        .select('id');
+      if (reqError) throw reqError;
+      const requestId = reqData?.[0]?.id;
+      if (!requestId) throw new Error('Gagal membuat pengajuan bedah');
+
+      const { error: bookingError } = await supabase
+        .from('surgery_bookings')
+        .insert({
+          surgery_request_id: requestId,
+          room_id: newSurgery.room_id || null,
+          scheduled_date: new Date(newSurgery.scheduled_time).toISOString(),
+          status: 'scheduled'
+        });
+      if (bookingError) throw bookingError;
+
       showForm = false;
-      newSurgery = { patient_id: '', procedure_name: '', description: '', priority: 'normal', scheduled_time: '', surgeon_id: '', anesthesia_type: 'lokal', room_id: '' };
-      await fetchSurgeries();
+      newSurgery = { visit_id: '', patient_id: '', procedure_name: '', description: '', priority: 'normal', scheduled_time: '', surgeon_id: '', anesthesia_type: 'lokal', room_id: '' };
+      await fetchBookings();
     } catch (err) {
       console.error('Submit surgery error:', err);
     } finally {
@@ -102,44 +131,91 @@
     }
   }
 
-  async function fetchSurgeries() {
+  async function fetchOkClinic() {
     try {
-      const { data, error } = await supabase
-        .from('surgeries')
-        .select(`
-          *,
-          patients:patient_id ( full_name, no_registration ),
-          doctors:surgeon_id ( full_name ),
-          rooms:room_id ( room_number )
-        `)
-        .order('scheduled_time', { ascending: false })
-        .limit(100);
+      const { data, error } = await supabase.from('clinics').select('clinic_id, name').order('name');
       if (error) throw error;
-      surgeries = (data || []).map(s => ({
-        ...s,
-        patient_name: s.patients?.full_name || '-',
-        patient_no: s.patients?.no_registration || '-',
-        surgeon_name: s.doctors?.full_name || '-',
-        room_name: s.rooms?.room_number || '-'
-      }));
+      const match = (data || []).find(c => c.clinic_id === 'POL-OK' || /operasi/i.test(c.name));
+      if (match) okClinicId = match.clinic_id;
     } catch (err) {
-      console.error('Fetch IBS surgeries error:', err);
+      console.error('Fetch OK clinic error:', err);
     }
   }
 
-  async function fetchPatients() {
+  async function fetchBookings() {
     try {
-      const { data, error } = await supabase.from('patients').select('patient_id, full_name, no_registration').order('full_name');
+      const { data, error } = await supabase
+        .from('surgery_bookings')
+        .select(`
+          *,
+          rooms:room_id ( room_number ),
+          surgery_requests:surgery_request_id (
+            procedure_name,
+            description,
+            priority,
+            anesthesia_type,
+            surgeon_id,
+            employees:surgeon_id ( full_name ),
+            visitations:visit_id ( patients:patient_id ( full_name, no_registration ) )
+          )
+        `)
+        .order('scheduled_date', { ascending: false })
+        .limit(100);
       if (error) throw error;
-      patients = data || [];
+      bookings = (data || []).map(b => {
+        const req = Array.isArray(b.surgery_requests) ? b.surgery_requests[0] : b.surgery_requests;
+        const visit = Array.isArray(req?.visitations) ? req.visitations[0] : req?.visitations;
+        const patient = Array.isArray(visit?.patients) ? visit.patients[0] : visit?.patients;
+        const surgeon = Array.isArray(req?.employees) ? req.employees[0] : req?.employees;
+        const room = Array.isArray(b.rooms) ? b.rooms[0] : b.rooms;
+        return {
+          ...b,
+          patient_name: patient?.full_name || '-',
+          patient_no: patient?.no_registration || '-',
+          procedure_name: req?.procedure_name || '-',
+          description: req?.description || '',
+          priority: req?.priority || 'normal',
+          anesthesia_type: req?.anesthesia_type || '-',
+          surgeon_name: surgeon?.full_name || '-',
+          room_name: room?.room_number || '-'
+        };
+      });
     } catch (err) {
-      console.error('Fetch patients error:', err);
+      console.error('Fetch IBS bookings error:', err);
+    }
+  }
+
+  async function fetchVisits() {
+    try {
+      const { data, error } = await supabase
+        .from('patient_visitations')
+        .select(`
+          visit_id,
+          visit_date,
+          patient_id,
+          patients:patient_id ( full_name, no_registration )
+        `)
+        .eq('visit_type', 'rawat_inap')
+        .is('exit_date', null)
+        .order('visit_date', { ascending: false });
+      if (error) throw error;
+      visits = (data || []).map(v => {
+        const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
+        return { ...v, patient_name: patient?.full_name || '-', patient_no: patient?.no_registration || '-' };
+      });
+    } catch (err) {
+      console.error('Fetch visits error:', err);
     }
   }
 
   async function fetchDoctors() {
     try {
-      const { data, error } = await supabase.from('doctors').select('doctor_id, full_name, specialization').order('full_name');
+      const { data, error } = await supabase
+        .from('employees')
+        .select('employee_id, full_name, specialization')
+        .eq('role', 'doctor')
+        .eq('is_active', true)
+        .order('full_name');
       if (error) throw error;
       doctors = data || [];
     } catch (err) {
@@ -147,9 +223,25 @@
     }
   }
 
+  async function fetchRooms() {
+    try {
+      const { data, error } = await supabase
+        .from('rooms')
+        .select('room_id, room_number')
+        .eq('clinic_id', okClinicId)
+        .eq('is_active', true)
+        .order('room_number');
+      if (error) throw error;
+      rooms = data || [];
+    } catch (err) {
+      console.error('Fetch rooms error:', err);
+    }
+  }
+
   async function refreshAll() {
     loading = true;
-    await Promise.all([fetchSurgeries(), fetchPatients(), fetchDoctors()]);
+    await fetchOkClinic();
+    await Promise.all([fetchBookings(), fetchVisits(), fetchDoctors(), fetchRooms()]);
     loading = false;
   }
 
@@ -183,7 +275,7 @@
     </button>
   </div>
 
-  <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
     <div class="card p-4">
       <p class="text-xs text-gray-500 uppercase tracking-wide font-medium">Total</p>
       <p class="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
@@ -196,13 +288,9 @@
       <p class="text-xs text-amber-700 uppercase tracking-wide font-medium">Operasi</p>
       <p class="text-2xl font-bold text-amber-700 mt-1">{stats.inProgress}</p>
     </div>
-    <div class="card p-4 border-purple-200 bg-purple-50">
-      <p class="text-xs text-purple-700 uppercase tracking-wide font-medium">Recovery</p>
-      <p class="text-2xl font-bold text-purple-700 mt-1">{stats.recovery}</p>
-    </div>
     <div class="card p-4 border-emerald-200 bg-emerald-50">
       <p class="text-xs text-emerald-700 uppercase tracking-wide font-medium">Selesai Hari Ini</p>
-      <p class="text-2xl font-bold text-emerald-700 mt-1">{stats.discharged}</p>
+      <p class="text-2xl font-bold text-emerald-700 mt-1">{stats.completedToday}</p>
     </div>
   </div>
 
@@ -214,7 +302,7 @@
       <h2 class="text-lg font-semibold text-gray-900">Alur Pasien Bedah</h2>
     </div>
     <div class="flex items-center gap-2 overflow-x-auto pb-2">
-      {#each ['Admission', 'Terjadwal', 'Operasi', 'Recovery', 'Selesai'] as step, i}
+      {#each ['Permintaan', 'Terjadwal', 'Operasi', 'Selesai'] as step, i}
         <div class="flex items-center gap-2 shrink-0">
           <div class="flex items-center justify-center w-8 h-8 rounded-full bg-teal-600 text-white text-xs font-bold">{i + 1}</div>
           <span class="text-sm font-medium text-gray-700">{step}</span>
@@ -261,13 +349,16 @@
         <h3 class="font-semibold text-gray-900 mb-4">Jadwalkan Bedah Baru</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="label">Pasien *</label>
-            <select class="select-field" bind:value={newSurgery.patient_id}>
+            <label class="label">Pasien (Rawat Inap) *</label>
+            <select class="select-field" bind:value={newSurgery.patient_id} onchange={onSelectPatient}>
               <option value="">Pilih Pasien</option>
-              {#each patients as p}
-                <option value={p.patient_id}>{p.full_name} ({p.no_registration})</option>
+              {#each visits as v}
+                <option value={v.patient_id}>{v.patient_name} ({v.patient_no})</option>
               {/each}
             </select>
+            {#if newSurgery.patient_id && !newSurgery.visit_id}
+              <p class="text-xs text-red-500 mt-1">Pasien tidak memiliki kunjungan rawat inap aktif</p>
+            {/if}
           </div>
           <div>
             <label class="label">Prosedur *</label>
@@ -286,7 +377,7 @@
             <select class="select-field" bind:value={newSurgery.surgeon_id}>
               <option value="">Pilih Dokter</option>
               {#each doctors as d}
-                <option value={d.doctor_id}>{d.full_name}</option>
+                <option value={d.employee_id}>{d.full_name} ({d.specialization || '-'})</option>
               {/each}
             </select>
           </div>
@@ -304,6 +395,15 @@
             <select class="select-field" bind:value={newSurgery.priority}>
               <option value="normal">Normal</option>
               <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">Kamar Operasi</label>
+            <select class="select-field" bind:value={newSurgery.room_id}>
+              <option value="">Pilih Kamar</option>
+              {#each rooms as r}
+                <option value={r.room_id}>{r.room_number}</option>
+              {/each}
             </select>
           </div>
         </div>
@@ -336,7 +436,7 @@
             <div class="flex flex-col lg:flex-row lg:items-center gap-4">
               <div class="flex items-center gap-3 lg:w-44 shrink-0">
                 <div class="text-center">
-                  <p class="text-xl font-bold text-teal-700">{getScheduleTime(surg.scheduled_time)}</p>
+                  <p class="text-xl font-bold text-teal-700">{getScheduleTime(surg.scheduled_date)}</p>
                   <p class="text-xs text-gray-500">{surg.room_name || '-'}</p>
                 </div>
               </div>
@@ -351,13 +451,13 @@
                 </div>
 
                 <div class="flex items-center gap-1 mb-2">
-                  {#each ['Admission', 'Jadwal', 'Operasi', 'Recovery', 'Selesai'] as stepLabel, si}
+                  {#each ['Jadwal', 'Operasi', 'Selesai'] as stepLabel, si}
                     <div class="flex items-center gap-1">
                       <div class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold
                         {si <= flow.current ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-500'}">
                         {si + 1}
                       </div>
-                      {#if si < 4}
+                      {#if si < 2}
                         <div class="w-4 h-0.5 {si < flow.current ? 'bg-teal-600' : 'bg-gray-200'}"></div>
                       {/if}
                     </div>
@@ -372,15 +472,11 @@
 
               <div class="shrink-0">
                 {#if surg.status === 'scheduled'}
-                  <button class="btn-success btn-sm text-xs" onclick={() => advanceStatus(surg.surgery_id, surg.status)}>
+                  <button class="btn-success btn-sm text-xs" onclick={() => advanceStatus(surg.id, surg.status)}>
                     Mulai Operasi
                   </button>
                 {:else if surg.status === 'in_progress'}
-                  <button class="btn-primary btn-sm text-xs" onclick={() => advanceStatus(surg.surgery_id, surg.status)}>
-                    Ke Recovery
-                  </button>
-                {:else if surg.status === 'recovery'}
-                  <button class="btn-primary btn-sm text-xs" onclick={() => advanceStatus(surg.surgery_id, surg.status)}>
+                  <button class="btn-primary btn-sm text-xs" onclick={() => advanceStatus(surg.id, surg.status)}>
                     Selesai
                   </button>
                 {/if}
@@ -425,7 +521,7 @@
                   </td>
                   <td class="table-cell text-gray-600">{s.procedure_name}</td>
                   <td class="table-cell text-gray-600 hidden md:table-cell">{s.surgeon_name}</td>
-                  <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">{formatDateTime(s.completed_at || s.scheduled_time)}</td>
+                  <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">{formatDateTime(s.actual_end || s.scheduled_date)}</td>
                   <td class="table-cell">
                     <span class="badge {statusCfg.class}">{statusCfg.label}</span>
                   </td>

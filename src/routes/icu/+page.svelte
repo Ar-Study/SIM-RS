@@ -63,32 +63,29 @@
     if (!quickActionData.content?.trim()) return;
     try {
       if (showQuickAction === 'cppt') {
-        await supabase.from('medical_notes').insert({
+        await supabase.from('cppt').insert({
           visit_id: quickActionData.patient_id,
-          note_type: 'cppt',
-          content: quickActionData.content,
-          created_at: new Date().toISOString()
+          subyektif: quickActionData.content
         });
       } else if (showQuickAction === 'lab') {
         await supabase.from('lab_orders').insert({
           visit_id: quickActionData.patient_id,
-          examination_type: quickActionData.content,
-          status: 'pending',
-          created_at: new Date().toISOString()
+          test_name: quickActionData.content,
+          status: 'ordered'
         });
       } else if (showQuickAction === 'radiology') {
         await supabase.from('radiology_orders').insert({
           visit_id: quickActionData.patient_id,
           examination_type: quickActionData.content,
-          status: 'pending',
-          created_at: new Date().toISOString()
+          status: 'ordered'
         });
       } else if (showQuickAction === 'medication') {
-        await supabase.from('medication_orders').insert({
+        await supabase.from('prescriptions').insert({
           visit_id: quickActionData.patient_id,
-          medication_name: quickActionData.content,
-          status: 'pending',
-          created_at: new Date().toISOString()
+          drug_name: quickActionData.content,
+          qty: 1,
+          prescription_type: 'ranap',
+          status: 'pending'
         });
       }
       closeQuickAction();
@@ -110,6 +107,7 @@
         return {
           ...b,
           bed_no: b.bed_number,
+          status: b.is_occupied ? 'occupied' : 'empty',
           rooms: room
             ? { ...room, name: room.room_number, class: roomClass?.name || '-' }
             : room
@@ -130,7 +128,6 @@
           patient_id,
           room_id,
           doctor_id,
-          diagnosis,
           patients:patient_id ( full_name, no_registration ),
           rooms:room_id ( room_number, room_classes:class_id ( name ) ),
           doctors:doctor_id ( full_name )
