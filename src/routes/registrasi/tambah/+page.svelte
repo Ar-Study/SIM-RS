@@ -4,6 +4,7 @@
   import { supabase } from '$lib/supabase.js';
   import { generateVisitId, formatDate } from '$lib/utils/helpers.js';
   import { VISIT_TYPES } from '$lib/utils/constants.js';
+  import { addConsultationBill } from '$lib/billing.js';
 
   let currentStep = $state(1);
   let loading = $state(false);
@@ -137,9 +138,29 @@
     }
   }
 
-  function fetchDoctorsByClinic() {
-    // employees table in full migration has no clinic_id relation
-    filteredDoctors = doctors;
+  async function fetchDoctorsByClinic() {
+    if (!clinicId) {
+      filteredDoctors = doctors;
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('employee_clinics')
+        .select('employee_id, employees:employee_id ( employee_id, full_name )')
+        .eq('clinic_id', clinicId);
+      if (error) throw error;
+
+      const mapped = (data || [])
+        .map((d) => (Array.isArray(d.employees) ? d.employees[0] : d.employees))
+        .filter(Boolean)
+        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+      // Fallback: jika poli belum punya mapping dokter, tampilkan semua dokter DPJP
+      filteredDoctors = mapped.length > 0 ? mapped : doctors;
+    } catch (err) {
+      console.error('Fetch doctors by clinic error:', err);
+      filteredDoctors = doctors;
+    }
   }
 
   async function fetchRoomsByClass(classId) {
@@ -299,6 +320,8 @@
           .update({ is_occupied: true })
           .eq('bed_id', bedId);
       }
+
+      await addConsultationBill(visitData.visit_id, clinicId);
 
       success = 'Registrasi berhasil disimpan';
       setTimeout(() => {

@@ -1,8 +1,8 @@
 <script>
-  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime, generateId } from '$lib/utils/helpers.js';
+  import { formatDateTime } from '$lib/utils/helpers.js';
+  import { toast } from '$lib/toast.svelte.js';
 
   let loading = $state(true);
   let activeTab = $state('aktif');
@@ -83,34 +83,48 @@
       const { error } = await supabase
         .from('labor_progress')
         .update({ status: nextStatus, updated_at: new Date().toISOString() })
-        .eq('visit_id', patientId);
+        .eq('patient_id', patientId);
       if (error) throw error;
+      toast(`Status persalinan diperbarui ke fase "${getLaborStatus(nextStatus).label}"`, 'success');
       await fetchLaborPatients();
     } catch (err) {
       console.error('Advance labor error:', err);
+      toast('Gagal memperbarui status persalinan', 'error');
     }
   }
 
   async function submitDelivery() {
-    if (!newDelivery.patient_id || !newDelivery.admission_time) return;
+    if (!newDelivery.patient_id) {
+      toast('Silakan pilih pasien terlebih dahulu', 'error');
+      return;
+    }
+    if (!newDelivery.admission_time) {
+      toast('Silakan isi jam masuk persalinan', 'error');
+      return;
+    }
     saving = true;
     try {
       const { error } = await supabase.from('labor_progress').insert({
-        visit_id: newDelivery.patient_id,
+        patient_id: newDelivery.patient_id,
         admission_time: newDelivery.admission_time,
-        gestational_age: newDelivery.gestational_age,
+        gestational_age: newDelivery.gestational_age || null,
         presentation: newDelivery.presentation,
         membrane_status: newDelivery.membrane_status,
-        cervix_dilation: newDelivery.cervix_dilation,
+        cervix_dilation: newDelivery.cervix_dilation || null,
+        contraction_freq: newDelivery.contraction_freq || null,
+        doctor_id: newDelivery.doctor_id || null,
+        notes: newDelivery.notes || null,
         status: 'admission',
         created_at: new Date().toISOString()
       });
       if (error) throw error;
+      toast('Pasien persalinan berhasil diterima', 'success');
       showForm = false;
       newDelivery = { patient_id: '', admission_time: '', gestational_age: '', presentation: 'kepala', membrane_status: 'intact', cervix_dilation: '', contraction_freq: '', doctor_id: '', notes: '' };
       await fetchLaborPatients();
     } catch (err) {
       console.error('Submit delivery error:', err);
+      toast('Gagal menyimpan pasien persalinan', 'error');
     } finally {
       saving = false;
     }
@@ -123,16 +137,16 @@
         .select(`
           *,
           patients:patient_id ( full_name, no_registration ),
-          doctors:doctor_id ( full_name )
+          employees:doctor_id ( full_name )
         `)
-        .not('status', 'in', '("completed")')
+        .neq('status', 'completed')
         .order('admission_time', { ascending: false });
       if (error) throw error;
       laborPatients = (data || []).map(p => ({
         ...p,
         patient_name: p.patients?.full_name || '-',
         patient_no: p.patients?.no_registration || '-',
-        doctor_name: p.doctors?.full_name || '-'
+        doctor_name: p.employees?.full_name || '-'
       }));
     } catch (err) {
       console.error('Fetch labor patients error:', err);
@@ -147,7 +161,7 @@
           *,
           patients:patient_id ( full_name, no_registration )
         `)
-        .eq('status', 'completed')
+        .in('status', ['postpartum', 'completed'])
         .order('updated_at', { ascending: false })
         .limit(20);
       if (error) throw error;
@@ -173,7 +187,11 @@
 
   async function fetchDoctors() {
     try {
-      const { data, error } = await supabase.from('doctors').select('doctor_id, full_name').order('full_name');
+      const { data, error } = await supabase
+        .from('employees')
+        .select('employee_id, full_name')
+        .eq('role', 'doctor')
+        .order('full_name');
       if (error) throw error;
       doctors = data || [];
     } catch (err) {
@@ -356,7 +374,7 @@
             <select class="select-field" bind:value={newDelivery.doctor_id}>
               <option value="">Pilih Dokter</option>
               {#each doctors as d}
-                <option value={d.doctor_id}>{d.full_name}</option>
+                <option value={d.employee_id}>{d.full_name}</option>
               {/each}
             </select>
           </div>
@@ -448,11 +466,11 @@
 
             <div class="flex gap-2">
               {#if labor.status !== 'postpartum'}
-                <button class="btn-primary btn-sm text-xs flex-1" onclick={() => advanceLaborStatus(labor.visit_id, labor.status)}>
+                <button class="btn-primary btn-sm text-xs flex-1" onclick={() => advanceLaborStatus(labor.patient_id, labor.status)}>
                   Lanjutkan ke Fase Berikutnya
                 </button>
               {:else}
-                <a href="/rawat-inap/{labor.visit_id}" class="btn-primary btn-sm text-xs flex-1 text-center">Lihat Detail</a>
+                <a href="/rawat-inap/{labor.visit_id || ''}" class="btn-primary btn-sm text-xs flex-1 text-center">Lihat Detail</a>
               {/if}
             </div>
           </div>

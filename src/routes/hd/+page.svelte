@@ -118,7 +118,7 @@
         .select(`
           *,
           patients:patient_id ( full_name, no_registration ),
-          doctors:nurse_id ( full_name )
+          employees:nurse_id ( employee_id, full_name )
         `)
         .in('status', ['scheduled', 'in_progress'])
         .order('scheduled_time', { ascending: false });
@@ -127,7 +127,7 @@
         ...s,
         patient_name: s.patients?.full_name || '-',
         patient_no: s.patients?.no_registration || '-',
-        nurse_name: s.doctors?.full_name || '-',
+        nurse_name: s.employees?.full_name || '-',
         machine_no: s.machine_id || '-'
       }));
     } catch (err) {
@@ -179,7 +179,11 @@
 
   async function fetchNurses() {
     try {
-      const { data, error } = await supabase.from('doctors').select('doctor_id, full_name').order('full_name');
+      const { data, error } = await supabase.from('employees')
+        .select('employee_id, full_name')
+        .eq('role', 'nurse')
+        .eq('is_active', true)
+        .order('full_name');
       if (error) throw error;
       nurses = data || [];
     } catch (err) {
@@ -323,7 +327,7 @@
             <select class="select-field" bind:value={newSession.machine_id}>
               <option value="">Pilih Mesin</option>
               {#each machines.filter(m => m.status === 'available') as m}
-                <option value={m.machine_no}>{m.machine_no}</option>
+                <option value={m.machine_id}>{m.machine_no}</option>
               {/each}
             </select>
           </div>
@@ -332,7 +336,7 @@
             <select class="select-field" bind:value={newSession.nurse_id}>
               <option value="">Pilih Perawat</option>
               {#each nurses as n}
-                <option value={n.doctor_id}>{n.full_name}</option>
+                <option value={n.employee_id}>{n.full_name}</option>
               {/each}
             </select>
           </div>

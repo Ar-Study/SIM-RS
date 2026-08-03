@@ -5,6 +5,7 @@
   import { supabase } from '$lib/supabase.js';
   import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
   import { PAYOR_TYPES, DISCHARGE_CONDITIONS } from '$lib/utils/constants.js';
+  import { addLabBill, addRadiologyBill, addDrugBill, removeBillBySource } from '$lib/billing.js';
 
   let visitId = $derived(page.params.visitId);
   let loading = $state(true);
@@ -59,12 +60,12 @@
     const map = {};
     treatmentBills.forEach(b => {
       const t = b.tariff_type || 'Lainnya';
-      map[t] = (map[t] || 0) + (b.amount || 0);
+      map[t] = (map[t] || 0) + (b.quantity || 1) * (b.amount || 0);
     });
     return map;
   });
 
-  const totalBill = $derived(treatmentBills.reduce((sum, b) => sum + (b.amount || 0), 0));
+  const totalBill = $derived(treatmentBills.reduce((sum, b) => sum + (b.quantity || 1) * (b.amount || 0), 0));
 
   const tabs = [
     { id: 'ringkasan', label: 'Ringkasan', icon: 'summary' },
@@ -330,10 +331,11 @@
 
   async function orderLab(testName, category) {
     try {
-      const { error } = await supabase.from('lab_orders').insert({
+      const { data: order, error } = await supabase.from('lab_orders').insert({
         visit_id: visitId, test_name: testName, category, status: 'ordered'
-      });
+      }).select().single();
       if (error) throw error;
+      await addLabBill(visitId, order.test_name, order.id);
       await fetchLabOrders();
     } catch (err) { console.error('Order lab error:', err); }
   }
@@ -350,15 +352,16 @@
 
   async function orderRadiology(examType, description) {
     try {
-      const { error } = await supabase.from('radiology_orders').insert({
+      const { data: order, error } = await supabase.from('radiology_orders').insert({
         visit_id: visitId,
         examination_type: examType,
         clinical_info: description,
         exam_type: examType,
         description,
         status: 'ordered'
-      });
+      }).select().single();
       if (error) throw error;
+      await addRadiologyBill(visitId, order.exam_type || order.examination_type, order.id);
       await fetchRadiologyOrders();
     } catch (err) { console.error('Order radiology error:', err); }
   }
@@ -384,12 +387,13 @@
     if (!newPrescription.drug_id || !newPrescription.qty) return;
     saving = true;
     try {
-      const { error } = await supabase.from('prescriptions').insert({
+      const { data: prescription, error } = await supabase.from('prescriptions').insert({
         visit_id: visitId, drug_id: newPrescription.drug_id, drug_name: newPrescription.drug_name,
         qty: Number(newPrescription.qty), dosage: newPrescription.dosage,
         frequency: newPrescription.frequency, instruction: newPrescription.instruction, prescription_type: 'ranap'
-      });
+      }).select().single();
       if (error) throw error;
+      await addDrugBill(visitId, prescription.drug_id, prescription.drug_name, prescription.qty, prescription.id);
       newPrescription = { drug_id: '', drug_name: '', qty: '', dosage: '', frequency: '', instruction: '' };
       await fetchPrescriptions();
     } catch (err) { console.error('Save prescription error:', err); }
@@ -398,6 +402,7 @@
 
   async function removePrescription(id) {
     try {
+      await removeBillBySource(visitId, 'prescription', id);
       const { error } = await supabase.from('prescriptions').delete().eq('id', id);
       if (error) throw error;
       await fetchPrescriptions();
@@ -521,11 +526,12 @@
     if (!dischargeForm.final_diagnosis.trim()) return;
     saving = true;
     try {
-      await supabase.from('patient_visitations').update({
+      const { error: visitErr } = await supabase.from('patient_visitations').update({
         exit_date: new Date().toISOString(),
-        status_periksa: 'selesai',
-        status_keluar: dischargeForm.condition
+        status_periksa: '1',
+        status_keluar: '1'
       }).eq('visit_id', visitId);
+      if (visitErr) throw visitErr;
 
       const { error } = await supabase.from('discharge_summaries').insert({
         visit_id: visitId,
@@ -539,13 +545,14 @@
       if (error) throw error;
 
       if (visit?.bed_id) {
-        await supabase.from('beds').update({ is_occupied: false }).eq('bed_id', visit.bed_id);
+        const { error: bedErr } = await supabase.from('beds').update({ is_occupied: false }).eq('bed_id', visit.bed_id);
+        if (bedErr) console.error('Free bed error:', bedErr);
       }
 
       await fetchVisitData();
       alert('Pasien berhasil dipulangkan');
       goto('/rawat-inap');
-    } catch (err) { console.error('Discharge error:', err); }
+    } catch (err) { console.error('Discharge error:', err); alert(`Gagal memulangkan pasien: ${err.message || err}`); }
     finally { saving = false; }
   }
 
@@ -1173,9 +1180,9 @@
                       {#each treatmentBills as bill, i}
                         <tr class="hover:bg-gray-50">
                           <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
-                          <td class="table-cell font-medium text-gray-900">{bill.description}</td>
+                          <td class="table-cell font-medium text-gray-900">{bill.description}{#if (bill.quantity || 1) > 1} <span class="text-xs text-gray-400">x{bill.quantity}</span>{/if}</td>
                           <td class="table-cell"><span class="badge badge-gray">{bill.tariff_type}</span></td>
-                          <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency(bill.amount)}</td>
+                          <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency((bill.quantity || 1) * (bill.amount || 0))}</td>
                           <td class="table-cell text-right">
                             <button class="text-gray-400 hover:text-red-500 transition-colors" onclick={() => removeBill(bill.id)}>
                               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>

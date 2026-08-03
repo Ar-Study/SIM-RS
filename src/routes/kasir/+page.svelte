@@ -23,12 +23,12 @@
       return d.toDateString() === today.toDateString();
     }).reduce((sum, v) => sum + (v.total_dibayar || 0), 0),
     pendapatanHari: invoices.filter(inv => {
-      const d = new Date(inv.payment_date || inv.created_at);
+      const d = new Date(inv.paid_at || inv.created_at);
       const today = new Date();
       return d.toDateString() === today.toDateString() && inv.status === 'paid';
     }).reduce((sum, inv) => sum + (inv.net_amount || inv.total_amount || 0), 0),
     totalTransaksi: invoices.filter(inv => {
-      const d = new Date(inv.payment_date || inv.created_at);
+      const d = new Date(inv.paid_at || inv.created_at);
       const today = new Date();
       return d.toDateString() === today.toDateString();
     }).length
@@ -64,17 +64,17 @@
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(inv =>
-        inv.invoice_no?.toLowerCase().includes(q) ||
+        inv.invoice_id?.toLowerCase().includes(q) ||
         inv.patient_name?.toLowerCase().includes(q)
       );
     }
     if (filterDate) {
       result = result.filter(inv => {
-        const d = new Date(inv.payment_date || inv.created_at);
+        const d = new Date(inv.paid_at || inv.created_at);
         return d.toISOString().slice(0, 10) === filterDate;
       });
     }
-    return result.sort((a, b) => new Date(b.payment_date || b.created_at) - new Date(a.payment_date || a.created_at));
+    return result.sort((a, b) => new Date(b.paid_at || b.created_at) - new Date(a.paid_at || a.created_at));
   });
 
   function getPaymentStatus(visit) {
@@ -118,12 +118,12 @@
       if (visitIds.length > 0) {
         const { data: bills } = await supabase
           .from('treatment_bills')
-          .select('visit_id, amount')
+          .select('visit_id, amount, quantity')
           .in('visit_id', visitIds);
 
         if (bills) {
           bills.forEach(b => {
-            billsMap[b.visit_id] = (billsMap[b.visit_id] || 0) + (b.amount || 0);
+            billsMap[b.visit_id] = (billsMap[b.visit_id] || 0) + (b.quantity || 1) * (b.amount || 0);
           });
         }
 
@@ -192,7 +192,7 @@
   }
 
   function viewDetail(invoiceId) {
-    const inv = invoices.find(i => i.id === invoiceId || i.invoice_id === invoiceId);
+    const inv = invoices.find(i => i.invoice_id === invoiceId);
     if (inv) goto(`/kasir/${inv.visit_id}`);
   }
 
@@ -449,13 +449,13 @@
                     <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                     <td class="table-cell">
                       <span class="font-mono text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">
-                        {inv.invoice_no || '-'}
+                        {inv.invoice_id || '-'}
                       </span>
                     </td>
                     <td class="table-cell">
                       <p class="font-medium text-gray-900">{inv.patient_name}</p>
                     </td>
-                    <td class="table-cell text-gray-500 hidden md:table-cell text-xs">{formatDateTime(inv.payment_date || inv.created_at)}</td>
+                    <td class="table-cell text-gray-500 hidden md:table-cell text-xs">{formatDateTime(inv.paid_at || inv.created_at)}</td>
                     <td class="table-cell text-right text-gray-600">{formatCurrency(inv.total_amount)}</td>
                     <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency(inv.net_amount || inv.total_amount)}</td>
                     <td class="table-cell hidden lg:table-cell">
@@ -466,7 +466,7 @@
                     </td>
                     <td class="table-cell text-right">
                       <div class="flex items-center justify-end gap-2">
-                        <button class="text-gray-400 hover:text-primary-600 transition-colors" onclick={() => viewDetail(inv.id)} title="Lihat Detail">
+                        <button class="text-gray-400 hover:text-primary-600 transition-colors" onclick={() => viewDetail(inv.invoice_id)} title="Lihat Detail">
                           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />

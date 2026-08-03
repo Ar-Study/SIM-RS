@@ -4,6 +4,7 @@
   import { supabase } from '$lib/supabase';
   import { getCurrentUser, signOut } from '$lib/auth';
   import { onMount } from 'svelte';
+  import Toast from '$lib/Toast.svelte';
   import '../app.css';
 
   let { children } = $props();
@@ -413,4 +414,5 @@
       </main>
     </div>
   </div>
+  <Toast />
 {/if}

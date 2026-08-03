@@ -5,6 +5,12 @@
   import { supabase } from '$lib/supabase.js';
   import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
   import { PAYOR_TYPES } from '$lib/utils/constants.js';
+  import { addLabBill, addRadiologyBill, addDrugBill, removeBillBySource } from '$lib/billing.js';
+  import { toast } from '$lib/toast.svelte.js';
+  import { generatePrescription } from '$lib/pdf/prescriptionPDF.js';
+  import { generateKwitansi } from '$lib/pdf/kwitansiPDF.js';
+  import { generateCppt } from '$lib/pdf/cpptPDF.js';
+  import { generateSuratKeterangan } from '$lib/pdf/suratKeteranganPDF.js';
 
   let visitId = $derived(page.params.visitId);
   let loading = $state(true);
@@ -75,7 +81,7 @@
   });
 
   const totalBill = $derived(
-    treatmentBills.reduce((sum, b) => sum + (b.amount || 0), 0)
+    treatmentBills.reduce((sum, b) => sum + (b.quantity || 1) * (b.amount || 0), 0)
   );
 
   const tabs = [
@@ -249,7 +255,7 @@ async function saveAssessment() {
   // Pastikan variabel visitId dan data assessment valid sebelum menembak API
   if (!visitId) {
     console.error('Save assessment error: visitId is required');
-    alert('Gagal menyimpan: ID Kunjungan tidak ditemukan.');
+    toast('Gagal menyimpan: ID Kunjungan tidak ditemukan.', 'error');
     return;
   }
 
@@ -275,7 +281,7 @@ async function saveAssessment() {
         .eq('assessment_id', visit.assessment_id);
 
       if (error) throw error;
-      alert('Asesmen berhasil diperbarui!');
+      toast('Asesmen berhasil diperbarui!');
     } else {
       // PROSES INSERT
       const { data, error } = await supabase
@@ -302,12 +308,12 @@ async function saveAssessment() {
       if (data?.assessment_id) {
         // Amankan penulisan objek untuk memicu reaktivitas Svelte
         visit = { ...visit, assessment_id: data.assessment_id };
-        alert('Asesmen baru berhasil disimpan!');
+        toast('Asesmen baru berhasil disimpan!');
       }
     }
   } catch (err) {
     console.error('Save assessment error:', err);
-    alert(`Gagal menyimpan data: ${err.message || err}`);
+    toast(`Gagal menyimpan data: ${err.message || err}`, 'error');
   } finally {
     saving = false;
   }
@@ -331,8 +337,10 @@ async function saveAssessment() {
       if (error) throw error;
       newCppt = { subyektif: '', obyektif: '', assessment: '', planning: '', instruksi: '' };
       await fetchCppt();
+      toast('Catatan CPPT berhasil disimpan.');
     } catch (err) {
       console.error('Save CPPT error:', err);
+      toast(`Gagal menyimpan CPPT: ${err.message || err}`, 'error');
     } finally {
       saving = false;
     }
@@ -430,7 +438,7 @@ async function saveAssessment() {
     if (!newPrescription.drug_id || !newPrescription.qty) return;
     saving = true;
     try {
-      const { error } = await supabase
+      const { data: prescription, error } = await supabase
         .from('prescriptions')
         .insert({
           visit_id: visitId,
@@ -440,13 +448,18 @@ async function saveAssessment() {
           dosage: newPrescription.dosage,
           frequency: newPrescription.frequency,
           instruction: newPrescription.instruction
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+      await addDrugBill(visitId, prescription.drug_id, prescription.drug_name, prescription.qty, prescription.id);
       newPrescription = { drug_id: '', drug_name: '', qty: '', dosage: '', frequency: '', instruction: '' };
       await fetchPrescriptions();
+      toast('Resep obat berhasil disimpan dan ditagihkan.');
     } catch (err) {
       console.error('Save prescription error:', err);
+      toast(`Gagal menyimpan resep: ${err.message || err}`, 'error');
     } finally {
       saving = false;
     }
@@ -454,6 +467,7 @@ async function saveAssessment() {
 
   async function removePrescription(id) {
     try {
+      await removeBillBySource(visitId, 'prescription', id);
       const { error } = await supabase
         .from('prescriptions')
         .delete()
@@ -542,19 +556,24 @@ async function saveAssessment() {
 
   async function orderLab(testName, category) {
     try {
-      const { error } = await supabase
+      const { data: order, error } = await supabase
         .from('lab_orders')
         .insert({
           visit_id: visitId,
           test_name: testName,
           category: category,
           status: 'ordered'
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+      await addLabBill(visitId, order.test_name, order.id);
       await fetchLabOrders();
+      toast('Order laboratorium berhasil dibuat.');
     } catch (err) {
       console.error('Order lab error:', err);
+      toast(`Gagal order lab: ${err.message || err}`, 'error');
     }
   }
 
@@ -576,7 +595,7 @@ async function saveAssessment() {
 
   async function orderRadiology(examType, description) {
     try {
-      const { error } = await supabase
+      const { data: order, error } = await supabase
         .from('radiology_orders')
         .insert({
           visit_id: visitId,
@@ -585,12 +604,17 @@ async function saveAssessment() {
           exam_type: examType,
           description: description,
           status: 'ordered'
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+      await addRadiologyBill(visitId, order.exam_type || order.examination_type, order.id);
       await fetchRadiologyOrders();
+      toast('Order radiologi berhasil dibuat.');
     } catch (err) {
       console.error('Order radiology error:', err);
+      toast(`Gagal order radiologi: ${err.message || err}`, 'error');
     }
   }
 
@@ -611,19 +635,89 @@ async function saveAssessment() {
   }
 
   function printPrescription() {
-    window.print();
+    generatePrescription({
+      doctorName: doctor?.full_name || '-',
+      doctorSpecialty: doctor?.specialization || '',
+      patientName: patient?.full_name || '-',
+      patientNoRM: patient?.no_registration || '-',
+      date: visit?.visit_date || new Date().toISOString(),
+      items: (prescriptions || []).map((p) => ({
+        drugName: p.drug_name || p.drug_id || '-',
+        dosage: p.dosage || '-',
+        frequency: p.frequency || '-',
+        duration: p.qty ? `${p.qty} item` : '-',
+        instruction: p.instruction || '-'
+      })),
+      notes: ''
+    });
   }
 
   function printReceipt() {
-    window.print();
+    generateKwitansi({
+      invoiceId: `INV-${visit?.visit_id?.slice(-8) || 'DRAFT'}`,
+      patientName: patient?.full_name || '-',
+      patientNoRM: patient?.no_registration || '-',
+      visitDate: visit?.visit_date || new Date().toISOString(),
+      paymentDate: visit?.visit_date || new Date().toISOString(),
+      items: (treatmentBills || []).map((b) => ({
+        description: b.description || '-',
+        qty: b.quantity || 1,
+        price: b.amount || 0,
+        total: (b.quantity || 1) * (b.amount || 0)
+      })),
+      totalAmount: totalBill,
+      discount: 0,
+      netAmount: totalBill,
+      paymentMethod: '-'
+    });
   }
 
   function printCppt() {
-    window.print();
+    generateCppt({
+      patientName: patient?.full_name || '-',
+      patientNoRM: patient?.no_registration || '-',
+      visitDate: visit?.visit_date || new Date().toISOString(),
+      doctorName: doctor?.full_name || '-',
+      entries: cpptList || []
+    });
+  }
+
+  function printSuratKeterangan() {
+    generateSuratKeterangan({
+      letterNo: `SK/${visit?.visit_id?.slice(-6) || 'DRAFT'}/${new Date().getFullYear()}`,
+      patientName: patient?.full_name || '-',
+      patientNoRM: patient?.no_registration || '-',
+      dob: patient?.date_of_birth || null,
+      gender: patient?.gender === 'L' ? 'Laki-laki' : patient?.gender === 'P' ? 'Perempuan' : '-',
+      address: patient?.address || '-',
+      visitDate: visit?.visit_date || new Date().toISOString(),
+      diagnosis: diagnoses.map((d) => `${d.icd_code} ${d.icd_name}`).join('; ') || '-',
+      keterangan: assessment?.subjective || '',
+      date: new Date().toISOString(),
+      doctorName: doctor?.full_name || '-'
+    });
   }
 
   function goBack() {
     goto('/rawat-jalan');
+  }
+
+  async function markExamined(completed) {
+    saving = true;
+    try {
+      const { error } = await supabase
+        .from('patient_visitations')
+        .update({ status_periksa: completed ? '1' : '0' })
+        .eq('visit_id', visitId);
+      if (error) throw error;
+      visit = { ...visit, status_periksa: completed ? '1' : '0' };
+      toast(completed ? 'Pasien ditandai sudah diperiksa.' : 'Status pemeriksaan dibatalkan.');
+    } catch (err) {
+      console.error('Mark examined error:', err);
+      toast(`Gagal menyimpan status: ${err.message || err}`, 'error');
+    } finally {
+      saving = false;
+    }
   }
 
   onMount(async () => {
@@ -670,6 +764,25 @@ async function saveAssessment() {
         Kembali
       </button>
       <h1 class="text-xl font-bold text-gray-900">Pemeriksaan Pasien</h1>
+      {#if visit.status_periksa === '1'}
+        <span class="badge badge-success">Sudah Diperiksa</span>
+      {:else}
+        <span class="badge badge-warning">Belum Diperiksa</span>
+      {/if}
+      <div class="ml-auto flex items-center gap-2">
+        {#if visit.status_periksa === '1'}
+          <button class="btn-secondary btn-sm" onclick={() => markExamined(false)} disabled={saving}>
+            Batalkan Periksa
+          </button>
+        {:else}
+          <button class="btn-success btn-sm" onclick={() => markExamined(true)} disabled={saving}>
+            <svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            Selesai Periksa
+          </button>
+        {/if}
+      </div>
     </div>
 
     <div class="card bg-gradient-to-r from-primary-50 to-blue-50 border-primary-200">
@@ -1317,11 +1430,11 @@ async function saveAssessment() {
                       {#each treatmentBills as bill, i}
                         <tr class="hover:bg-gray-50">
                           <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
-                          <td class="table-cell font-medium text-gray-900">{bill.description}</td>
+                          <td class="table-cell font-medium text-gray-900">{bill.description}{#if (bill.quantity || 1) > 1} <span class="text-xs text-gray-400">x{bill.quantity}</span>{/if}</td>
                           <td class="table-cell">
                             <span class="badge badge-gray">{bill.tariff_type}</span>
                           </td>
-                          <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency(bill.amount)}</td>
+                          <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency((bill.quantity || 1) * (bill.amount || 0))}</td>
                           <td class="table-cell text-right">
                             <button class="text-gray-400 hover:text-red-500 transition-colors" title="Hapus tagihan" onclick={() => removeBill(bill.id)}>
                               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1393,7 +1506,7 @@ async function saveAssessment() {
                 </div>
               </button>
 
-              <button class="card hover:shadow-md transition-shadow text-left group" onclick={printCppt}>
+              <button class="card hover:shadow-md transition-shadow text-left group" onclick={printSuratKeterangan}>
                 <div class="flex items-center gap-4">
                   <div class="shrink-0 w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center group-hover:bg-amber-200 transition-colors">
                     <svg class="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

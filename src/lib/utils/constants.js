@@ -42,7 +42,7 @@ export const TRIAGE_LEVELS = {
 };
 
 export const DISCHARGE_CONDITIONS = {
-  semuh: 'Sembuh',
+  sembuh: 'Sembuh',
   berobat_jalan: 'Berobat Jalan',
   rujuk: 'Rujuk',
   meninggal: 'Meninggal',

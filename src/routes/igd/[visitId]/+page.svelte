@@ -5,6 +5,8 @@
   import { supabase } from '$lib/supabase.js';
   import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
   import { TRIAGE_LEVELS, PAYOR_TYPES, TARIFF_TYPES } from '$lib/utils/constants.js';
+  import { addLabBill, addRadiologyBill, addDrugBill, removeBillBySource } from '$lib/billing.js';
+  import { toast } from '$lib/toast.svelte.js';
 
   let visitId = $derived(page.params.visitId);
   let loading = $state(true);
@@ -97,9 +99,10 @@
   });
 
   let rooms = $state([]);
+  let availableBeds = $state([]);
 
   const totalBill = $derived(
-    treatmentBills.reduce((sum, b) => sum + (b.amount || 0), 0)
+    treatmentBills.reduce((sum, b) => sum + (b.quantity || 1) * (b.amount || 0), 0)
   );
 
   const timeElapsed = $derived.by(() => {
@@ -196,6 +199,7 @@
         disposition.referral_hospital = visit.disposition_referral_hospital || '';
         disposition.referral_notes = visit.disposition_referral_notes || '';
         disposition.discharge_notes = visit.disposition_discharge_notes || '';
+        if (disposition.target_room) await fetchBeds(disposition.target_room);
       }
     } catch (err) {
       console.error('Fetch visit error:', err);
@@ -295,17 +299,34 @@
     try {
       const { data, error } = await supabase
         .from('rooms')
-        .select('room_id, room_number, room_classes:class_id ( name )')
+        .select('room_id, room_number, room_classes:class_id ( class_id, name )')
         .eq('is_active', true)
         .order('room_number');
       if (error) throw error;
       rooms = (data || []).map(r => ({
         room_id: r.room_id,
+        class_id: Array.isArray(r.room_classes) ? r.room_classes[0]?.class_id : r.room_classes?.class_id || null,
         name: r.room_number,
         room_type: Array.isArray(r.room_classes) ? r.room_classes[0]?.name : r.room_classes?.name || '-'
       }));
     } catch (err) {
       console.error('Fetch rooms error:', err);
+    }
+  }
+
+  async function fetchBeds(roomId) {
+    if (!roomId) { availableBeds = []; return; }
+    try {
+      const { data, error } = await supabase
+        .from('beds')
+        .select('bed_id, bed_number')
+        .eq('room_id', roomId)
+        .eq('is_occupied', false)
+        .order('bed_number');
+      if (error) throw error;
+      availableBeds = data || [];
+    } catch (err) {
+      console.error('Fetch beds error:', err);
     }
   }
 
@@ -529,15 +550,18 @@
 
   async function orderLab(testName, category) {
     try {
-      const { error } = await supabase
+      const { data: order, error } = await supabase
         .from('lab_orders')
         .insert({
           visit_id: visitId,
           test_name: testName,
           category: category,
           status: 'ordered'
-        });
+        })
+        .select()
+        .single();
       if (error) throw error;
+      await addLabBill(visitId, order.test_name, order.id);
       await fetchLabOrders();
     } catch (err) {
       console.error('Order lab error:', err);
@@ -561,7 +585,7 @@
 
   async function orderRadiology(examType, description) {
     try {
-      const { error } = await supabase
+      const { data: order, error } = await supabase
         .from('radiology_orders')
         .insert({
           visit_id: visitId,
@@ -570,8 +594,11 @@
           exam_type: examType,
           description: description,
           status: 'ordered'
-        });
+        })
+        .select()
+        .single();
       if (error) throw error;
+      await addRadiologyBill(visitId, order.exam_type || order.examination_type, order.id);
       await fetchRadiologyOrders();
     } catch (err) {
       console.error('Order radiology error:', err);
@@ -605,7 +632,7 @@
     if (!newPrescription.drug_id || !newPrescription.qty) return;
     saving = true;
     try {
-      const { error } = await supabase
+      const { data: prescription, error } = await supabase
         .from('prescriptions')
         .insert({
           visit_id: visitId,
@@ -615,8 +642,11 @@
           dosage: newPrescription.dosage,
           frequency: newPrescription.frequency,
           instruction: newPrescription.instruction
-        });
+        })
+        .select()
+        .single();
       if (error) throw error;
+      await addDrugBill(visitId, prescription.drug_id, prescription.drug_name, prescription.qty, prescription.id);
       newPrescription = { drug_id: '', drug_name: '', qty: '', dosage: '', frequency: '', instruction: '' };
       await fetchPrescriptions();
     } catch (err) {
@@ -628,6 +658,7 @@
 
   async function removePrescription(id) {
     try {
+      await removeBillBySource(visitId, 'prescription', id);
       const { error } = await supabase
         .from('prescriptions')
         .delete()
@@ -712,6 +743,8 @@
   async function saveDisposition() {
     saving = true;
     try {
+      if (!disposition.type) return;
+
       const updateData = {
         disposition_type: disposition.type,
         disposition_target_room: disposition.target_room,
@@ -720,18 +753,48 @@
         disposition_referral_notes: disposition.referral_notes,
         disposition_discharge_notes: disposition.discharge_notes
       };
-      if (disposition.type === 'meninggal' || disposition.type === 'pulang') {
-        updateData.status_keluar = '1';
+
+      if (disposition.type === 'rawat_inap') {
+        if (!disposition.target_room || !disposition.target_bed) {
+          toast('Pilih kamar dan tempat tidur tujuan rawat inap terlebih dahulu.', 'warning');
+          saving = false;
+          return;
+        }
+        const room = rooms.find(r => r.room_id === disposition.target_room);
+        updateData.visit_type = 'rawat_inap';
+        updateData.room_id = disposition.target_room;
+        updateData.bed_id = disposition.target_bed;
+        updateData.class_id = room?.class_id || null;
+        updateData.in_date = new Date().toISOString();
+        updateData.status_keluar = '0';
         updateData.status_periksa = '1';
       }
+
+      if (disposition.type === 'meninggal' || disposition.type === 'pulang' || disposition.type === 'rawat_jalan' || disposition.type === 'rujuk') {
+        updateData.status_keluar = '1';
+        updateData.status_periksa = '1';
+        if (disposition.type === 'rawat_jalan') updateData.visit_type = 'rawat_jalan';
+      }
+
       const { error } = await supabase
         .from('patient_visitations')
         .update(updateData)
         .eq('visit_id', visitId);
       if (error) throw error;
+
+      if (disposition.type === 'rawat_inap') {
+        const { error: bedErr } = await supabase
+          .from('beds')
+          .update({ is_occupied: true })
+          .eq('bed_id', disposition.target_bed);
+        if (bedErr) throw bedErr;
+      }
+
       visit = { ...visit, ...updateData };
+      toast('Disposisi berhasil disimpan.', 'success');
     } catch (err) {
       console.error('Save disposition error:', err);
+      toast('Gagal menyimpan disposisi.', 'error');
     } finally {
       saving = false;
     }
@@ -1536,11 +1599,11 @@
                       {#each treatmentBills as bill, i}
                         <tr class="hover:bg-gray-50">
                           <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
-                          <td class="table-cell font-medium text-gray-900">{bill.description}</td>
+                          <td class="table-cell font-medium text-gray-900">{bill.description}{#if (bill.quantity || 1) > 1} <span class="text-xs text-gray-400">x{bill.quantity}</span>{/if}</td>
                           <td class="table-cell">
                             <span class="badge badge-gray">{bill.tariff_type}</span>
                           </td>
-                          <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency(bill.amount)}</td>
+                          <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency((bill.quantity || 1) * (bill.amount || 0))}</td>
                           <td class="table-cell text-right">
                             <button class="text-gray-400 hover:text-red-500 transition-colors" onclick={() => removeBill(bill.id)}>
                               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1642,7 +1705,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div class="space-y-1">
                     <label class="label">Kamar</label>
-                    <select class="select-field" bind:value={disposition.target_room}>
+                    <select class="select-field" bind:value={disposition.target_room} onchange={() => fetchBeds(disposition.target_room)}>
                       <option value="">Pilih Kamar...</option>
                       {#each rooms as room}
                         <option value={room.room_id}>{room.name} ({room.room_type})</option>
@@ -1651,7 +1714,15 @@
                   </div>
                   <div class="space-y-1">
                     <label class="label">Nomor Tempat Tidur</label>
-                    <input type="text" class="input-field" bind:value={disposition.target_bed} placeholder="Nomor tempat tidur" />
+                    <select class="select-field" bind:value={disposition.target_bed}>
+                      <option value="">Pilih Tempat Tidur...</option>
+                      {#each availableBeds as bed}
+                        <option value={bed.bed_id}>{bed.bed_number}</option>
+                      {/each}
+                    </select>
+                    {#if availableBeds.length === 0 && disposition.target_room}
+                      <p class="text-xs text-amber-600 mt-1">Tidak ada tempat tidur tersedia di kamar ini.</p>
+                    {/if}
                   </div>
                 </div>
               </div>
