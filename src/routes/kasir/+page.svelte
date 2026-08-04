@@ -24,6 +24,7 @@
     }).reduce((sum, v) => sum + (v.total_dibayar || 0), 0),
     pendapatanHari: invoices.filter(inv => {
       const d = new Date(inv.paid_at || inv.created_at);
+      const d = new Date(inv.paid_at || inv.created_at);
       const today = new Date();
       return d.toDateString() === today.toDateString() && inv.status === 'paid';
     }).reduce((sum, inv) => sum + (inv.net_amount || inv.total_amount || 0), 0),
@@ -118,12 +119,12 @@
       if (visitIds.length > 0) {
         const { data: bills } = await supabase
           .from('treatment_bills')
-          .select('visit_id, amount')
+          .select('visit_id, amount, quantity')
           .in('visit_id', visitIds);
 
         if (bills) {
           bills.forEach(b => {
-            billsMap[b.visit_id] = (billsMap[b.visit_id] || 0) + (b.amount || 0);
+            billsMap[b.visit_id] = (billsMap[b.visit_id] || 0) + (b.quantity || 1) * (b.amount || 0);
           });
         }
 

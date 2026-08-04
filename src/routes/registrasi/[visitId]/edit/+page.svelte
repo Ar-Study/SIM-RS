@@ -14,6 +14,7 @@
 
   let clinics = $state([]);
   let doctors = $state([]);
+  let filteredDoctors = $state([]);
   let roomClasses = $state([]);
   let rooms = $state([]);
   let availableBeds = $state([]);
@@ -48,9 +49,45 @@
 
     clinics = clinicsResult.data || [];
     doctors = doctorsResult.data || [];
+    filteredDoctors = doctorsResult.data || [];
     roomClasses = classesResult.data || [];
     payors = payorsResult.data || [];
   }
+
+  async function filterDoctorsByClinic(clinicId) {
+    if (!clinicId) {
+      filteredDoctors = doctors;
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('employee_clinics')
+        .select('employee_id, employees:employee_id ( employee_id, full_name )')
+        .eq('clinic_id', clinicId);
+      if (error) throw error;
+
+      let mapped = (data || [])
+        .map((d) => (Array.isArray(d.employees) ? d.employees[0] : d.employees))
+        .filter(Boolean)
+        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+      const current = doctors.find((d) => d.employee_id === form.doctor_id);
+      if (current && !mapped.find((d) => d.employee_id === current.employee_id)) {
+        mapped = [current, ...mapped];
+      }
+
+      filteredDoctors = mapped.length > 0 ? mapped : doctors;
+    } catch (err) {
+      console.error('Filter doctors by clinic error:', err);
+      filteredDoctors = doctors;
+    }
+  }
+
+  $effect(() => {
+    if (form.clinic_id) {
+      filterDoctorsByClinic(form.clinic_id);
+    }
+  });
 
   async function fetchVisitDetail() {
     const visitId = $page.params.visitId;
@@ -269,6 +306,10 @@
       await fetchMasterData();
       await fetchVisitDetail();
 
+      if (form.clinic_id) {
+        await filterDoctorsByClinic(form.clinic_id);
+      }
+
       if (form.visit_type === 'rawat_inap' && form.class_id) {
         await fetchRoomsByClass(form.class_id);
       }
@@ -395,7 +436,7 @@
             <label class="label" for="doctor_id">Dokter</label>
             <select id="doctor_id" bind:value={form.doctor_id} class="select-field">
               <option value="">- Pilih Dokter -</option>
-              {#each doctors as d}
+              {#each filteredDoctors as d}
                 <option value={d.employee_id}>{d.full_name}</option>
               {/each}
             </select>

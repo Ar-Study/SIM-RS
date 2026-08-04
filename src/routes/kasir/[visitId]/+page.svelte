@@ -21,6 +21,7 @@
   let amountReceived = $state(0);
   let discount = $state(0);
   let notes = $state('');
+  let invoiceNo = $state('');
 
   const categoryMap = {
     'Konsultasi': 'Konsultasi',
@@ -38,12 +39,12 @@
       const cat = b.tariff_type || 'Lainnya';
       if (!map[cat]) map[cat] = { items: [], total: 0 };
       map[cat].items.push(b);
-      map[cat].total += b.amount || 0;
+      map[cat].total += (b.quantity || 1) * (b.amount || 0);
     });
     return map;
   });
 
-  const subtotal = $derived(bills.reduce((sum, b) => sum + (b.amount || 0), 0));
+  const subtotal = $derived(bills.reduce((sum, b) => sum + (b.quantity || 1) * (b.amount || 0), 0));
   const discountAmount = $derived(Math.min(Number(discount) || 0, subtotal));
   const netAmount = $derived(subtotal - discountAmount);
   const change = $derived(paymentMethod === 'tunai' ? Math.max(0, (Number(amountReceived) || 0) - netAmount) : 0);
@@ -101,6 +102,7 @@
           discount: discountAmount,
           net_amount: netAmount,
           paid_amount: Number(amountReceived) || netAmount,
+          paid_amount: Number(amountReceived) || netAmount,
           payment_method: paymentMethod,
           paid_at: new Date().toISOString(),
           payment_note: notes,
@@ -113,14 +115,12 @@
 
       const { error: visitErr } = await supabase
         .from('patient_visitations')
-        .update({
-          status_pembayaran: '1',
-          partial_amount: netAmount
-        })
+        .update({ status_pembayaran: '1' })
         .eq('visit_id', visitId);
 
       if (visitErr) throw visitErr;
 
+      invoiceNo = invoice?.invoice_id || '';
       paymentDone = true;
     } catch (err) {
       console.error('Process payment error:', err);
@@ -174,6 +174,7 @@
       </div>
       <h2 class="text-2xl font-bold text-gray-900 mb-2">Pembayaran Berhasil</h2>
       <p class="text-sm text-gray-500 mb-1">{patient?.full_name}</p>
+      <p class="text-sm text-gray-500 mb-1">No. Invoice: <span class="font-mono font-semibold text-gray-900">{invoiceNo || '-'}</span></p>
       <p class="text-3xl font-bold text-emerald-600 mb-6">{formatCurrency(netAmount)}</p>
 
       <div class="bg-gray-50 rounded-lg p-4 mb-6 text-sm space-y-2">
@@ -280,9 +281,9 @@
                         <span class="badge badge-gray text-xs">{bill.tariff_type || '-'}</span>
                       </td>
                       <td class="table-cell font-medium text-gray-900">{bill.description || '-'}</td>
-                      <td class="table-cell text-center text-gray-600">{bill.qty || 1}</td>
+                      <td class="table-cell text-center text-gray-600">{bill.quantity || 1}</td>
                       <td class="table-cell text-right text-gray-600">{formatCurrency(bill.amount)}</td>
-                      <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency((bill.qty || 1) * (bill.amount || 0))}</td>
+                      <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency((bill.quantity || 1) * (bill.amount || 0))}</td>
                     </tr>
                   {/each}
                 </tbody>

@@ -3,6 +3,8 @@
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
   import { formatDate } from '$lib/utils/helpers.js';
+  import { addLabBill, addRadiologyBill, addDrugBill } from '$lib/billing.js';
+  import { toast } from '$lib/toast.svelte.js';
 
   let loading = $state(true);
   let icuPatients = $state([]);
@@ -10,7 +12,7 @@
   let searchQuery = $state('');
 
   let showQuickAction = $state(null);
-  let quickActionData = $state({});
+  let quickActionData = $state({ patient_id: null, content: '' });
 
   const filteredPatients = $derived.by(() => {
     let result = icuPatients;
@@ -51,46 +53,71 @@
 
   function openQuickAction(patientId, action) {
     showQuickAction = action;
-    quickActionData = { patient_id: patientId, content: '', type: '' };
+    quickActionData = { patient_id: patientId, content: '' };
   }
 
   function closeQuickAction() {
     showQuickAction = null;
-    quickActionData = {};
+    quickActionData = { patient_id: null, content: '' };
   }
 
   async function saveQuickAction() {
-    if (!quickActionData.content?.trim()) return;
+    if (!quickActionData.content?.trim()) {
+      toast('Silakan isi data terlebih dahulu', 'error');
+      return;
+    }
     try {
       if (showQuickAction === 'cppt') {
-        await supabase.from('cppt').insert({
+        const { error } = await supabase.from('cppt').insert({
           visit_id: quickActionData.patient_id,
           subyektif: quickActionData.content
         });
+        if (error) throw error;
+        toast('CPPT berhasil disimpan', 'success');
       } else if (showQuickAction === 'lab') {
-        await supabase.from('lab_orders').insert({
+        const { data: order, error } = await supabase.from('lab_orders').insert({
           visit_id: quickActionData.patient_id,
           test_name: quickActionData.content,
+          category: 'Lainnya',
           status: 'ordered'
-        });
+        }).select().single();
+        if (error) throw error;
+        if (order) await addLabBill(order.visit_id, order.test_name, order.id);
+        toast('Order laboratorium berhasil dibuat', 'success');
       } else if (showQuickAction === 'radiology') {
-        await supabase.from('radiology_orders').insert({
+        const { data: order, error } = await supabase.from('radiology_orders').insert({
           visit_id: quickActionData.patient_id,
           examination_type: quickActionData.content,
+          exam_type: quickActionData.content,
+          description: quickActionData.content,
           status: 'ordered'
-        });
+        }).select().single();
+        if (error) throw error;
+        if (order) await addRadiologyBill(order.visit_id, order.exam_type || order.examination_type, order.id);
+        toast('Order radiologi berhasil dibuat', 'success');
       } else if (showQuickAction === 'medication') {
-        await supabase.from('prescriptions').insert({
+        const { data: prescription, error } = await supabase.from('prescriptions').insert({
           visit_id: quickActionData.patient_id,
           drug_name: quickActionData.content,
           qty: 1,
           prescription_type: 'ranap',
           status: 'pending'
-        });
+        }).select().single();
+        if (error) throw error;
+        if (prescription) {
+          const { data: drug } = await supabase.from('drugs')
+            .select('drug_id, sell_price')
+            .ilike('name', prescription.drug_name)
+            .limit(1)
+            .maybeSingle();
+          await addDrugBill(prescription.visit_id, drug?.drug_id || null, prescription.drug_name, prescription.qty, prescription.id);
+        }
+        toast('Obat berhasil ditambahkan', 'success');
       }
       closeQuickAction();
     } catch (err) {
       console.error('Save quick action error:', err);
+      toast(`Gagal menyimpan: ${err.message || err}`, 'error');
     }
   }
 
@@ -318,6 +345,8 @@
                   <div class="flex gap-1 justify-end">
                     <button class="btn-secondary btn-sm text-[10px] px-2 py-1" onclick={() => openQuickAction(ip.visit_id, 'cppt')} title="CPPT">CPPT</button>
                     <button class="btn-secondary btn-sm text-[10px] px-2 py-1" onclick={() => openQuickAction(ip.visit_id, 'lab')} title="Lab">Lab</button>
+                    <button class="btn-secondary btn-sm text-[10px] px-2 py-1" onclick={() => openQuickAction(ip.visit_id, 'radiology')} title="Radiologi">Radiologi</button>
+                    <button class="btn-secondary btn-sm text-[10px] px-2 py-1" onclick={() => openQuickAction(ip.visit_id, 'medication')} title="Obat">Obat</button>
                     <a href="/rawat-inap/{ip.visit_id}" class="btn-primary btn-sm text-[10px] px-2 py-1">Detail</a>
                   </div>
                 </td>
