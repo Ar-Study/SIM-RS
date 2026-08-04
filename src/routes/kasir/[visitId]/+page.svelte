@@ -93,22 +93,21 @@
     processing = true;
 
     try {
-      const invoiceNo = `INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-
-      const { error: invoiceErr } = await supabase
+      const { data: invoiceData, error: invoiceErr } = await supabase
         .from('billing_invoices')
         .insert({
-          invoice_no: invoiceNo,
           visit_id: visitId,
           total_amount: subtotal,
           discount: discountAmount,
           net_amount: netAmount,
-          amount_paid: Number(amountReceived) || netAmount,
+          paid_amount: Number(amountReceived) || netAmount,
           payment_method: paymentMethod,
-          payment_date: new Date().toISOString(),
-          notes: notes,
+          paid_at: new Date().toISOString(),
+          payment_note: notes,
           status: 'paid'
-        });
+        })
+        .select('invoice_id')
+        .single();
 
       if (invoiceErr) throw invoiceErr;
 

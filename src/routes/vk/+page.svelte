@@ -97,11 +97,15 @@
     try {
       const { error } = await supabase.from('labor_progress').insert({
         visit_id: newDelivery.patient_id,
+        patient_id: newDelivery.patient_id,
         admission_time: newDelivery.admission_time,
-        gestational_age: newDelivery.gestational_age,
+        gestational_age: newDelivery.gestational_age || null,
         presentation: newDelivery.presentation,
         membrane_status: newDelivery.membrane_status,
-        cervix_dilation: newDelivery.cervix_dilation,
+        cervix_dilation: newDelivery.cervix_dilation || null,
+        contraction_freq: newDelivery.contraction_freq || null,
+        doctor_id: newDelivery.doctor_id || null,
+        notes: newDelivery.notes || null,
         status: 'admission',
         created_at: new Date().toISOString()
       });
@@ -122,8 +126,13 @@
         .from('labor_progress')
         .select(`
           *,
-          patients:patient_id ( full_name, no_registration ),
-          doctors:doctor_id ( full_name )
+          patients!inner (
+            full_name,
+            no_registration
+          ),
+          doctors:doctor_id (
+            full_name
+          )
         `)
         .not('status', 'in', '("completed")')
         .order('admission_time', { ascending: false });
@@ -145,7 +154,10 @@
         .from('labor_progress')
         .select(`
           *,
-          patients:patient_id ( full_name, no_registration )
+          patients!inner (
+            full_name,
+            no_registration
+          )
         `)
         .eq('status', 'completed')
         .order('updated_at', { ascending: false })
@@ -173,7 +185,11 @@
 
   async function fetchDoctors() {
     try {
-      const { data, error } = await supabase.from('doctors').select('doctor_id, full_name').order('full_name');
+    const { data, error } = await supabase
+      .from('employees')
+      .select('employee_id, full_name')
+      .eq('role', 'doctor')
+      .order('full_name');
       if (error) throw error;
       doctors = data || [];
     } catch (err) {
@@ -183,7 +199,19 @@
 
   async function fetchBeds() {
     try {
-      const { data, error } = await supabase.from('beds').select('*, rooms:room_id (room_number, room_classes:class_id (name))').order('bed_number');
+      const { data, error } = await supabase
+        .from('beds')
+        .select(`
+          *,
+          rooms!inner(
+            room_number,
+            class_id,
+            clinic_id,
+            room_classes:class_id(name)
+          )
+        `)
+        .eq('rooms.clinic_id', 'POL-VK')
+        .order('bed_number');
       if (error) throw error;
       beds = (data || []).map(b => {
         const room = Array.isArray(b.rooms) ? b.rooms[0] : b.rooms;
@@ -195,7 +223,7 @@
             ? { ...room, name: room.room_number, class: roomClass?.name || '-' }
             : room
         };
-      }).filter(b => b.rooms?.class === 'VK');
+      });
     } catch (err) {
       console.error('Fetch VK beds error:', err);
     }

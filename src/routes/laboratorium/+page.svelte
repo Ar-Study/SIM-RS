@@ -126,7 +126,7 @@
     }
   }
 
-  function openInputHasil(order) {
+  async function openInputHasil(order) {
     selectedOrder = order;
     const items = order.analysis_items || [];
     resultItems = items.map(item => ({
@@ -242,6 +242,32 @@
         .update({ status: 'completed', completed_at: new Date().toISOString(), results: summary || null })
         .eq('id', selectedOrder.id);
       if (updateError) throw updateError;
+
+      for (const item of resultItems) {
+        const isAbnormal = checkAbnormal(item);
+        if (item.id) {
+          await supabase
+            .from('lab_analysis')
+            .update({
+              result: item.result,
+              flag: isAbnormal ? 'abnormal' : null
+            })
+            .eq('id', item.id);
+        } else {
+          await supabase
+            .from('lab_analysis')
+            .insert({
+              lab_order_id: selectedOrder.id,
+              analysis_name: item.name,
+              category: item.category,
+              normal_value: item.normal_value,
+              result: item.result,
+              unit: item.unit,
+              method: item.method,
+              flag: isAbnormal ? 'abnormal' : null
+            });
+        }
+      }
 
       selectedOrder = null;
       resultItems = [];
@@ -448,7 +474,7 @@
                           </button>
                         {:else if order.status === 'in_progress'}
                           <button class="btn-success btn-sm text-xs" onclick={() => openInputHasil(order)}>
-                            <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" viewBox="openInputHasil0 0 24 24" stroke="currentColor" stroke-width="2">
                               <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
                             </svg>
                             Input Hasil

@@ -102,7 +102,7 @@
             dispensed_at: now,
             dispensed_notes: notes
           })
-          .eq('visit_id', rx.visit_id);
+          .eq('id', rx.id);
 
         if (rxError) throw rxError;
 
@@ -129,6 +129,7 @@
       }
 
       await fetchPrescriptions();
+      goto('/farmasi');
     } catch (err) {
       console.error('Dispense error:', err);
       alert('Gagal menyerahkan resep. Silakan coba lagi.');
