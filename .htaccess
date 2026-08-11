@@ -1,0 +1,16 @@
+RewriteEngine On
+RewriteBase /SIM-RS/
+
+# Sajikan entry point aplikasi dari folder build.
+RewriteRule ^$ build/index.html [L]
+
+# Sajikan aset hasil build yang diminta oleh index.html.
+RewriteRule ^_app/(.*)$ build/_app/$1 [L]
+
+# Jika file atau folder fisik memang ada, jangan di-rewrite.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Fallback SPA untuk semua route aplikasi.
+RewriteRule ^.*$ build/index.html [L]
