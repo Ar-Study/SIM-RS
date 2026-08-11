@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
   import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { addDrugBill } from '$lib/billing.js';
 
   let visitId = $derived(page.params.id);
   let loading = $state(true);
@@ -105,6 +106,10 @@
           .eq('id', rx.id);
 
         if (rxError) throw rxError;
+
+        // Add billing for prescription dispensing
+        const drugName = rx.drug_name || (rx.drugs ? rx.drugs.name : null) || 'Obat';
+        await addDrugBill(rx.visit_id, rx.drug_id, drugName, rx.qty, rx.id);
 
         if (rx.drug_id && rx.drugs) {
           const { error: stockError } = await supabase

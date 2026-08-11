@@ -102,7 +102,6 @@
           discount: discountAmount,
           net_amount: netAmount,
           paid_amount: Number(amountReceived) || netAmount,
-          paid_amount: Number(amountReceived) || netAmount,
           payment_method: paymentMethod,
           paid_at: new Date().toISOString(),
           payment_note: notes,
@@ -120,18 +119,22 @@
 
       if (visitErr) throw visitErr;
 
-      invoiceNo = invoice?.invoice_id || '';
+      invoiceNo = invoiceData?.invoice_id || '';
       paymentDone = true;
     } catch (err) {
-      console.error('Process payment error:', err);
-      alert('Gagal memproses pembayaran. Silakan coba lagi.');
+      console.error('Process payment error:', err?.message || err, JSON.stringify(err));
+      alert('Gagal memproses pembayaran: ' + (err?.message || err) + '. Silakan coba lagi.');
     } finally {
       processing = false;
     }
   }
 
   function printReceipt() {
-    window.print();
+    if (invoiceNo) {
+      window.open(`/kasir/kuitansi/${invoiceNo}`, '_blank');
+    } else {
+      window.print();
+    }
   }
 
   function goBack() {

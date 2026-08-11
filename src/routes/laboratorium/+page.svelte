@@ -3,6 +3,7 @@
   import { supabase } from '$lib/supabase.js';
   import { formatDate, formatDateTime, generateId } from '$lib/utils/helpers.js';
   import { LAB_CATEGORIES } from '$lib/utils/constants.js';
+  import { addLabBill } from '$lib/billing.js';
 
   let loading = $state(true);
   let activeTab = $state('order_masuk');
@@ -242,6 +243,9 @@
         .update({ status: 'completed', completed_at: new Date().toISOString(), results: summary || null })
         .eq('id', selectedOrder.id);
       if (updateError) throw updateError;
+
+      // Add billing for lab order completion
+      await addLabBill(selectedOrder.visit_id, selectedOrder.test_name, selectedOrder.id);
 
       for (const item of resultItems) {
         const isAbnormal = checkAbnormal(item);

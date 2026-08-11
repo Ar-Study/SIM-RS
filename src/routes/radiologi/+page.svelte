@@ -3,6 +3,7 @@
   import { supabase } from '$lib/supabase.js';
   import { formatDate, formatDateTime, generateId } from '$lib/utils/helpers.js';
   import { RADIOLOGY_TYPES } from '$lib/utils/constants.js';
+  import { addRadiologyBill } from '$lib/billing.js';
 
   let loading = $state(true);
   let activeTab = $state('order_masuk');
@@ -141,6 +142,9 @@
         .eq('id', selectedOrder.id);
 
       if (error) throw error;
+
+      // Add billing for radiology order completion
+      await addRadiologyBill(selectedOrder.visit_id, selectedOrder.exam_type || selectedOrder.examination_type, selectedOrder.id);
 
       selectedOrder = null;
       resultData = { result: '', impression: '' };

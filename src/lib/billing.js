@@ -32,7 +32,7 @@ export async function addTreatmentBill({
       tariff_id,
       quantity: quantity,
       unit_price: price,
-      amount: price,
+      amount: price * quantity,
       tariff_type,
       description,
       source_type,

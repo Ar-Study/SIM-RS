@@ -24,7 +24,6 @@
     }).reduce((sum, v) => sum + (v.total_dibayar || 0), 0),
     pendapatanHari: invoices.filter(inv => {
       const d = new Date(inv.paid_at || inv.created_at);
-      const d = new Date(inv.paid_at || inv.created_at);
       const today = new Date();
       return d.toDateString() === today.toDateString() && inv.status === 'paid';
     }).reduce((sum, inv) => sum + (inv.net_amount || inv.total_amount || 0), 0),
@@ -198,7 +197,7 @@
   }
 
   function printReceipt(invoiceId) {
-    window.print();
+    window.open(`/kasir/kuitansi/${invoiceId}`, '_blank');
   }
 
   async function refreshAll() {
