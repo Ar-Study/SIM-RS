@@ -6,3 +6,4 @@ dist
 .env.local
 dbo_simrs.sql
 *.sql
+dbo_simrs.sql
