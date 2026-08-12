@@ -9,13 +9,16 @@ const config = {
     adapter: adapter({
       pages: 'build',
       assets: 'build',
-      fallback: '404.html', // Wajib untuk routing SPA agar tidak 404 saat direct access/refresh
+      fallback: '404.html',
       precompress: false,
       strict: true
     }),
     paths: {
-      // base path aktif saat di GitHub Actions / production
       base: process.env.NODE_ENV === 'production' ? '/SIM-RS' : ''
+    },
+    prerender: {
+      handleHttpError: 'warn',
+      handleUnseenRoutes: 'ignore' // Mengabaikan dynamic route yang tidak ditemukan saat crawling
     }
   }
 };
