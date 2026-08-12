@@ -183,6 +183,12 @@
   const isLoginPage = $derived(currentPath.startsWith('/login'));
   const isAPMPage = $derived(currentPath.startsWith('/apm'));
   const isPublicPage = $derived(isLoginPage || isAPMPage);
+
+  $effect(() => {
+    if (!loading && !user && !isPublicPage) {
+      goto(withBasePath('/login'), { replaceState: true });
+    }
+  });
 </script>
 
 {#if isPublicPage}
@@ -195,7 +201,16 @@
     </div>
   </div>
 {:else if !user}
-  {@render children()}
+  {#if isPublicPage}
+    {@render children()}
+  {:else}
+    <div class="flex items-center justify-center min-h-screen bg-gray-50">
+      <div class="flex flex-col items-center gap-4">
+        <div class="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+        <p class="text-sm text-gray-500 font-medium">Mengarahkan ke login...</p>
+      </div>
+    </div>
+  {/if}
 {:else}
   <div class="flex h-screen overflow-hidden bg-gray-50">
 
