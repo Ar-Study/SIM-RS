@@ -1,1 +1,0 @@
-import{d}from"./CXlyN3sb.js";const s=d([]);let e=0;function p(i,a="success"){const t=++e;s.push({id:t,message:i,type:a}),setTimeout(()=>{const o=s.findIndex(c=>c.id===t);o!==-1&&s.splice(o,1)},3500)}export{s as a,p as t};
