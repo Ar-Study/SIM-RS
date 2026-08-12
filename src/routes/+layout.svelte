@@ -1,4 +1,5 @@
 <script>
+  import { base } from '$app/paths';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { supabase } from '$lib/supabase';
@@ -70,9 +71,24 @@
     }
   ];
 
+  function withBasePath(path) {
+    if (!path?.startsWith('/')) return path;
+    if (!base || base === '/') return path;
+    if (path === base || path.startsWith(`${base}/`)) return path;
+    return `${base}${path}`;
+  }
+
+  function stripBasePath(pathname) {
+    if (!base || base === '/') return pathname;
+    if (!pathname.startsWith(base)) return pathname;
+    const stripped = pathname.slice(base.length);
+    return stripped || '/';
+  }
+
   function isActive(href) {
-    if (href === '/') return page.url.pathname === '/';
-    return page.url.pathname.startsWith(href);
+    const current = stripBasePath(page.url.pathname);
+    if (href === '/') return current === '/';
+    return current === href || current.startsWith(`${href}/`);
   }
 
   function toggleSection(sectionId) {
@@ -82,7 +98,7 @@
   async function handleLogout() {
     try {
       await signOut();
-      goto('/login');
+      goto(withBasePath('/login'));
     } catch (err) {
       console.error('Logout failed:', err);
     }
@@ -92,7 +108,33 @@
     sidebarOpen = false;
   }
 
+  function handleBaseAwareLinkClick(event) {
+    const anchor = event.target?.closest?.('a[href]');
+    if (!anchor) return;
+
+    const rawHref = anchor.getAttribute('href');
+    if (!rawHref || !rawHref.startsWith('/') || rawHref.startsWith('//')) return;
+
+    const fixedHref = withBasePath(rawHref);
+    if (fixedHref === rawHref) return;
+
+    anchor.setAttribute('href', fixedHref);
+
+    const isPlainLeftClick = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+    const target = anchor.getAttribute('target');
+    const isSelfTarget = !target || target === '_self';
+
+    if (isPlainLeftClick && isSelfTarget && !anchor.hasAttribute('download')) {
+      event.preventDefault();
+      goto(fixedHref);
+    }
+  }
+
   onMount(async () => {
+    let unsubscribeAuth = () => {};
+
+    document.addEventListener('click', handleBaseAwareLinkClick, true);
+
     try {
       const currentUser = await getCurrentUser();
       if (currentUser) {
@@ -110,7 +152,7 @@
         if (event === 'SIGNED_OUT') {
           user = null;
           profile = null;
-          goto('/login');
+          goto(withBasePath('/login'));
         } else if (event === 'SIGNED_IN' && session) {
           getCurrentUser().then(u => {
             if (u) {
@@ -120,12 +162,15 @@
           });
         }
       });
-      if (data?.subscription) {
-        return () => data.subscription.unsubscribe();
-      }
+      if (data?.subscription) unsubscribeAuth = () => data.subscription.unsubscribe();
     } catch (e) {
       console.warn('Auth state listener failed:', e);
     }
+
+    return () => {
+      document.removeEventListener('click', handleBaseAwareLinkClick, true);
+      unsubscribeAuth();
+    };
   });
 
   const roleLabel = $derived(profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ') : '');
@@ -134,7 +179,7 @@
       ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
       : profile?.email?.slice(0, 2).toUpperCase() || '??'
   );
-  const currentPath = $derived(page.url.pathname);
+  const currentPath = $derived(stripBasePath(page.url.pathname));
   const isLoginPage = $derived(currentPath.startsWith('/login'));
   const isAPMPage = $derived(currentPath.startsWith('/apm'));
   const isPublicPage = $derived(isLoginPage || isAPMPage);
@@ -209,7 +254,7 @@
               {#each section.items as item}
                 <li>
                   <a
-                    href={item.href}
+                    href={withBasePath(item.href)}
                     onclick={closeSidebar}
                     class="group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150
                       {isActive(item.href)
@@ -384,7 +429,7 @@
                   <p class="text-xs text-gray-400">{user?.email}</p>
                 </div>
                 <a
-                  href="/profile"
+                  href={withBasePath('/profile')}
                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                   onclick={() => activeDropdown = null}
                 >
