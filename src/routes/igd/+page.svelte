@@ -363,9 +363,18 @@
                     <span class="badge {status.class}">{status.label}</span>
                   </td>
                   <td class="table-cell text-right">
-                    <button class="btn-primary btn-sm text-xs" onclick={() => goDetail(visit.visit_id)}>
-                      Periksa
-                    </button>
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button class="btn-primary btn-sm text-xs" onclick={() => goDetail(visit.visit_id)}>
+                        Periksa
+                      </button>
+                      <a
+                        href="/rawat-inap/admit?visit_id={visit.visit_id}"
+                        class="btn-secondary btn-sm text-xs inline-flex items-center gap-1 text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200"
+                        title="Admit ke Rawat Inap"
+                      >
+                        + Ranap
+                      </a>
+                    </div>
                   </td>
                 </tr>
               {/each}

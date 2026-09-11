@@ -16,7 +16,7 @@
   let sidebarOpen = $state(false);
   let sidebarCollapsed = $state(false);
   let activeDropdown = $state(null);
-  let expandedSections = $state({ frontOffice: true, specialized: false, backOffice: false, admin: false });
+  let expandedSections = $state({ frontOffice: true, backOffice: false, admin: false });
 
   const navSections = [
     {
@@ -30,27 +30,15 @@
       title: 'Front Office',
       items: [
         { label: 'Registrasi Pasien', href: '/registrasi', icon: 'clipboard-plus' },
-        { label: 'Rawat Jalan', href: '/rawat-jalan', icon: 'stethoscope' },
+        { label: 'Rawat Jalan / IGD', href: '/rawat-jalan', icon: 'stethoscope' },
         { label: 'Rawat Inap', href: '/rawat-inap', icon: 'bed-double' },
-        { label: 'IGD', href: '/igd', icon: 'siren' },
+        { label: 'IGD (Triage)', href: '/igd', icon: 'siren' },
         { label: 'Rekam Medis', href: '/rekam-medis', icon: 'file-text' },
         { label: 'Laboratorium', href: '/laboratorium', icon: 'flask-conical' },
         { label: 'Radiologi', href: '/radiologi', icon: 'scan' },
         { label: 'Farmasi', href: '/farmasi', icon: 'pill' },
         { label: 'Kasir / Billing', href: '/kasir', icon: 'receipt' },
         { label: 'Operasi', href: '/operasi', icon: 'scissors' }
-      ]
-    },
-    {
-      id: 'specialized',
-      title: 'Unit Khusus',
-      items: [
-        { label: 'ICU', href: '/icu', icon: 'heart-pulse' },
-        { label: 'NICU', href: '/nicu', icon: 'baby' },
-        { label: 'HD (Hemodialisa)', href: '/hd', icon: 'droplets' },
-        { label: 'IBS', href: '/ibs', icon: 'building' },
-        { label: 'OBS / GYN', href: '/obsygn', icon: 'heart-handshake' },
-        { label: 'VK (Verlos Kamer)', href: '/vk', icon: 'egg' }
       ]
     },
     {

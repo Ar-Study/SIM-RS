@@ -256,6 +256,12 @@
         </svg>
         Refresh
       </button>
+      <a href="/rawat-inap/admit" class="btn-primary btn-sm inline-flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        <span>+ Admit Pasien (dari RJ/IGD)</span>
+      </a>
     </div>
   </div>
 
@@ -605,9 +611,19 @@
                     </svg>
                   {/if}
                 </div>
-                <p class="text-xs {bed.is_occupied ? 'text-red-500' : 'text-emerald-500'} mt-0.5">
-                  {bed.is_occupied ? 'Terisi' : 'Kosong'}
-                </p>
+                <div class="flex items-center justify-between mt-1">
+                  <p class="text-xs {bed.is_occupied ? 'text-red-500' : 'text-emerald-500'}">
+                    {bed.is_occupied ? 'Terisi' : 'Kosong'}
+                  </p>
+                  {#if !bed.is_occupied}
+                    <a
+                      href="/rawat-inap/admit?room_id={selectedRoom.room_id}&bed_id={bed.bed_id}"
+                      class="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-100 px-1.5 py-0.5 rounded transition-colors"
+                    >
+                      Admit &rarr;
+                    </a>
+                  {/if}
+                </div>
               </div>
             {/each}
           </div>

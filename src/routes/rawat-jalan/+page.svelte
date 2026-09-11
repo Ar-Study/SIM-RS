@@ -65,6 +65,7 @@
         .select(`
           visit_id,
           visit_date,
+          visit_type,
           ticket_no,
           status_periksa,
           status_keluar,
@@ -72,11 +73,13 @@
           patient_id,
           clinic_id,
           doctor_id,
+          room_id,
+          bed_id,
           patients:patient_id ( full_name, no_registration ),
           clinics:clinic_id ( name ),
           employees:doctor_id ( full_name ) 
         `)
-        .eq('visit_type', 'rawat_jalan')
+        .in('visit_type', ['rawat_jalan', 'igd'])
         .gte('visit_date', todayStart.toISOString())
         .lte('visit_date', todayEnd.toISOString())
         .order('visit_date', { ascending: true });
@@ -220,8 +223,8 @@
 <div class="space-y-6">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">Rawat Jalan - Antrian Hari Ini</h1>
-      <p class="text-sm text-gray-500 mt-1">{formattedDate}</p>
+      <h1 class="text-2xl font-bold text-gray-900">Rawat Jalan &amp; IGD - Antrean Pasien</h1>
+      <p class="text-sm text-gray-500 mt-1">{formattedDate} • Poliklinik dan Pelayanan Gawat Darurat</p>
     </div>
     <div class="flex items-center gap-3">
       <button class="btn-secondary btn-sm" onclick={refreshAll}>
@@ -230,6 +233,12 @@
         </svg>
         Refresh
       </button>
+      <a href="/rawat-inap/admit" class="btn-primary btn-sm inline-flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        <span>Admit ke Ranap</span>
+      </a>
     </div>
   </div>
 
@@ -322,19 +331,39 @@
                         <p class="text-xs text-gray-400 font-mono">{visit.patient_no}</p>
                       </div>
                     </td>
-                    <td class="table-cell text-gray-600 hidden md:table-cell">{visit.clinic_name}</td>
+                    <td class="table-cell text-gray-600 hidden md:table-cell">
+                      <div class="flex items-center gap-1.5">
+                        {#if visit.visit_type === 'igd'}
+                          <span class="badge badge-danger text-[10px] px-1.5 py-0.5">IGD</span>
+                        {/if}
+                        <span>{visit.clinic_name}</span>
+                      </div>
+                    </td>
                     <td class="table-cell text-gray-600 hidden lg:table-cell">{visit.doctor_name}</td>
                     <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">{getVisitTime(visit.visit_date)}</td>
                     <td class="table-cell">
                       <span class="badge {status.class}">{status.label}</span>
                     </td>
                     <td class="table-cell text-right">
-                      <a
-                        href="/rawat-jalan/{visit.visit_id}"
-                        class="btn-primary btn-sm text-xs"
-                      >
-                        Periksa
-                      </a>
+                      <div class="flex items-center justify-end gap-1.5">
+                        <a
+                          href={visit.visit_type === 'igd' ? `/igd/${visit.visit_id}` : `/rawat-jalan/${visit.visit_id}`}
+                          class="btn-primary btn-sm text-xs"
+                        >
+                          Periksa
+                        </a>
+                        {#if !visit.room_id}
+                          <a
+                            href="/rawat-inap/admit?visit_id={visit.visit_id}"
+                            class="btn-secondary btn-sm text-xs inline-flex items-center gap-1 text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200"
+                            title="Admit ke Rawat Inap"
+                          >
+                            + Ranap
+                          </a>
+                        {:else}
+                          <span class="badge badge-warning text-[10px]">Ranap</span>
+                        {/if}
+                      </div>
                     </td>
                   </tr>
                 {/each}

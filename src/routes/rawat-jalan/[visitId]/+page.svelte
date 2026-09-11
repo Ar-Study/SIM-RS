@@ -770,6 +770,16 @@ async function saveAssessment() {
         <span class="badge badge-warning">Belum Diperiksa</span>
       {/if}
       <div class="ml-auto flex items-center gap-2">
+        <a
+          href="/rawat-inap/admit?visit_id={visitId}"
+          class="btn-secondary btn-sm inline-flex items-center gap-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300"
+          title="Pindahkan pasien ke Rawat Inap (Admit)"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          <span>Admit ke Ranap</span>
+        </a>
         {#if visit.status_periksa === '1'}
           <button class="btn-secondary btn-sm" onclick={() => markExamined(false)} disabled={saving}>
             Batalkan Periksa

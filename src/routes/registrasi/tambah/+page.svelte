@@ -62,11 +62,7 @@
   const isFormValid = $derived.by(() => {
     if (!selectedPatient && !showNewPatientForm) return false;
     if (showNewPatientForm && (!newPatient.full_name || !newPatient.date_of_birth)) return false;
-    if (!visitType) return false;
     if (!clinicId) return false;
-    if (visitType === 'rawat_inap') {
-      if (!classId || !roomId || !bedId) return false;
-    }
     return true;
   });
 
@@ -231,12 +227,6 @@
         error = 'Poli wajib dipilih';
         return;
       }
-      if (visitType === 'rawat_inap') {
-        if (!classId || !roomId || !bedId) {
-          error = 'Kelas, kamar, dan tempat tidur wajib dipilih untuk rawat inap';
-          return;
-        }
-      }
     }
     error = '';
     currentStep++;
@@ -288,12 +278,15 @@
         throw new Error('Gagal mendapatkan ID pasien');
       }
 
+      const isIGD = clinicId === 'POL-IGD' || clinics.find(c => c.clinic_id === clinicId)?.name?.toLowerCase().includes('igd');
+      const resolvedVisitType = isIGD ? 'igd' : 'rawat_jalan';
+
       const visitData = {
         patient_id: patientId,
         clinic_id: clinicId,
         visit_id: generateVisitId(),
         doctor_id: doctorId || null,
-        visit_type: visitType,
+        visit_type: resolvedVisitType,
         visit_date: new Date().toISOString(),
         status_periksa: '0',
         status_pembayaran: '0',
@@ -302,28 +295,15 @@
         payor_id: payorId || null
       };
 
-      if (visitType === 'rawat_inap') {
-        visitData.bed_id = bedId;
-        visitData.room_id = roomId;
-        visitData.class_id = classId;
-      }
-
       const { error: visitError } = await supabase
         .from('patient_visitations')
         .insert(visitData);
 
       if (visitError) throw visitError;
 
-      if (visitType === 'rawat_inap' && bedId) {
-        await supabase
-          .from('beds')
-          .update({ is_occupied: true })
-          .eq('bed_id', bedId);
-      }
-
       await addConsultationBill(visitData.visit_id, clinicId);
 
-      success = 'Registrasi berhasil disimpan';
+      success = 'Registrasi berhasil disimpan (ID Kunjungan: ' + visitData.visit_id + ')';
       setTimeout(() => {
         goto('/registrasi');
       }, 1000);
@@ -622,29 +602,47 @@
   {/if}
 
   <!-- Step 2: Visit Details -->
+  <!-- Step 2: Visit Details -->
   {#if currentStep === 2}
     <div class="card space-y-6">
-      <h2 class="text-lg font-semibold text-gray-900">Detail Kunjungan</h2>
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900">Detail Kunjungan Rawat Jalan / IGD</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Pilih poli tujuan (termasuk IGD). Seluruh kunjungan diawali dari Rawat Jalan / IGD.</p>
+        </div>
+        <span class="badge badge-info">Rawat Jalan / IGD</span>
+      </div>
+
+      <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5 text-xs text-blue-800">
+        <svg class="w-4 h-4 text-blue-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+        </svg>
+        <span>
+          <strong>Alur Rawat Inap:</strong> Pasien didaftarkan terlebih dahulu ke Poliklinik atau IGD. Jika dokter memutuskan pasien perlu opname/rawat inap, proses pemindahan dilakukan melalui <strong>Rawat Inap &gt; Admit Pasien</strong> menggunakan ID Kunjungan ini.
+        </span>
+      </div>
+
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label class="label" for="visitType">Jenis Kunjungan <span class="text-red-500">*</span></label>
-          <select id="visitType" bind:value={visitType} class="select-field">
-            <option value="rawat_jalan">Rawat Jalan</option>
-            <option value="rawat_inap">Rawat Inap</option>
-            <option value="igd">IGD / Rawat Darurat</option>
-          </select>
+          <label class="label" for="visitType">Jenis Layanan</label>
+          <div class="input-field bg-gray-50 flex items-center justify-between text-gray-700 font-medium">
+            <span>Rawat Jalan / IGD</span>
+            <span class="text-xs text-gray-400">Pintu Masuk Utama</span>
+          </div>
         </div>
         <div>
-          <label class="label" for="clinic">Poli / Klinik <span class="text-red-500">*</span></label>
+          <label class="label" for="clinic">Poli / Klinik Tujuan <span class="text-red-500">*</span></label>
           <select id="clinic" bind:value={clinicId} class="select-field">
-            <option value="">- Pilih Poli -</option>
+            <option value="">- Pilih Poli / IGD -</option>
             {#each clinics as c}
-              <option value={c.clinic_id}>{c.name}</option>
+              <option value={c.clinic_id}>
+                {c.name} {c.clinic_id === 'POL-IGD' || c.name.toLowerCase().includes('igd') ? '(Gawat Darurat)' : ''}
+              </option>
             {/each}
           </select>
         </div>
         <div>
-          <label class="label" for="doctor">Dokter (DPJP)</label>
+          <label class="label" for="doctor">Dokter Pemeriksa (DPJP)</label>
           <select id="doctor" bind:value={doctorId} class="select-field">
             <option value="">- Pilih Dokter -</option>
             {#each filteredDoctors as d}
@@ -662,42 +660,9 @@
           </select>
         </div>
 
-        {#if visitType === 'rawat_inap'}
-          <div>
-            <label class="label" for="roomClass">Kelas Kamar <span class="text-red-500">*</span></label>
-            <select id="roomClass" bind:value={classId} class="select-field">
-              <option value="">- Pilih Kelas -</option>
-              {#each roomClasses as rc}
-                <option value={rc.class_id}>{rc.name}</option>
-              {/each}
-            </select>
-          </div>
-          <div>
-            <label class="label" for="room">Kamar <span class="text-red-500">*</span></label>
-            <select id="room" bind:value={roomId} class="select-field" disabled={!classId}>
-              <option value="">- Pilih Kamar -</option>
-              {#each rooms as r}
-                <option value={r.room_id}>{r.room_number}</option>
-              {/each}
-            </select>
-          </div>
-          <div>
-            <label class="label" for="bed">Tempat Tidur <span class="text-red-500">*</span></label>
-            <select id="bed" bind:value={bedId} class="select-field" disabled={!roomId}>
-              <option value="">- Pilih Tempat Tidur -</option>
-              {#each availableBeds as b}
-                <option value={b.bed_id}>{b.bed_number}</option>
-              {/each}
-            </select>
-            {#if roomId && availableBeds.length === 0}
-              <p class="text-xs text-red-500 mt-1">Tidak ada tempat tidur tersedia</p>
-            {/if}
-          </div>
-        {/if}
-
         <div class="sm:col-span-2">
-          <label class="label" for="notes">Catatan / Keterangan</label>
-          <textarea id="notes" bind:value={notes} class="input-field" rows="3" placeholder="Catatan tambahan untuk kunjungan ini..."></textarea>
+          <label class="label" for="notes">Catatan / Keterangan Keluhan</label>
+          <textarea id="notes" bind:value={notes} class="input-field" rows="3" placeholder="Catatan keluhan awal pasien atau instruksi registrasi..."></textarea>
         </div>
       </div>
     </div>
@@ -736,16 +701,11 @@
       <div class="p-4 bg-gray-50 rounded-xl">
         <h3 class="text-sm font-semibold text-gray-700 mb-3">Detail Kunjungan</h3>
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-          <div><p class="text-gray-500 text-xs">Jenis Kunjungan</p><p class="font-medium text-gray-900">{VISIT_TYPES[visitType]}</p></div>
-          <div><p class="text-gray-500 text-xs">Poli</p><p class="font-medium text-gray-900">{clinics.find(c => c.clinic_id === clinicId)?.name || '-'}</p></div>
-          <div><p class="text-gray-500 text-xs">Dokter</p><p class="font-medium text-gray-900">{filteredDoctors.find(d => d.employee_id === doctorId)?.full_name || '-'}</p></div>
+          <div><p class="text-gray-500 text-xs">Layanan</p><p class="font-medium text-gray-900">Rawat Jalan / IGD</p></div>
+          <div><p class="text-gray-500 text-xs">Poli / Klinik</p><p class="font-medium text-gray-900">{clinics.find(c => c.clinic_id === clinicId)?.name || '-'}</p></div>
+          <div><p class="text-gray-500 text-xs">Dokter DPJP</p><p class="font-medium text-gray-900">{filteredDoctors.find(d => d.employee_id === doctorId)?.full_name || '-'}</p></div>
           <div><p class="text-gray-500 text-xs">Penanggung Biaya</p><p class="font-medium text-gray-900">{payors.find(p => p.payor_id === payorId)?.name || '-'}</p></div>
-          {#if visitType === 'rawat_inap'}
-            <div><p class="text-gray-500 text-xs">Kelas</p><p class="font-medium text-gray-900">{roomClasses.find(r => r.class_id === classId)?.name || '-'}</p></div>
-            <div><p class="text-gray-500 text-xs">Kamar</p><p class="font-medium text-gray-900">{rooms.find(r => r.room_id === roomId)?.room_number || '-'}</p></div>
-            <div><p class="text-gray-500 text-xs">Tempat Tidur</p><p class="font-medium text-gray-900">{availableBeds.find(b => b.bed_id === bedId)?.bed_number || '-'}</p></div>
-          {/if}
-          <div class="sm:col-span-3">
+          <div class="sm:col-span-2">
             <p class="text-gray-500 text-xs">Catatan</p>
             <p class="font-medium text-gray-900">{notes || '-'}</p>
           </div>

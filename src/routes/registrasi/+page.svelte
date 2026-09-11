@@ -32,6 +32,9 @@
   }
 
   function getVisitTypeLabel(type) {
+    if (type === 'igd') return 'IGD';
+    if (type === 'rawat_jalan') return 'Rawat Jalan';
+    if (type === 'rawat_inap') return 'Rawat Inap';
     return VISIT_TYPES[type] || type;
   }
 
@@ -98,7 +101,9 @@
       // *Catatan: Jika di database kolom foreign key Anda adalah employee_id (bukan doctor_id), 
       // ganti baris di atas menjadi -> employees:employee_id ( fullname )
 
-      if (filterType !== 'all') {
+      if (filterType === 'rawat_jalan_igd') {
+        query = query.in('visit_type', ['rawat_jalan', 'igd']);
+      } else if (filterType !== 'all') {
         query = query.eq('visit_type', filterType);
       }
 
@@ -247,9 +252,10 @@
         <label class="label" for="filterType">Jenis Kunjungan</label>
         <select id="filterType" bind:value={filterType} onchange={handleFilter} class="select-field">
           <option value="all">Semua Jenis</option>
-          <option value="rawat_jalan">Rawat Jalan</option>
+          <option value="rawat_jalan_igd">Rawat Jalan / IGD</option>
+          <option value="rawat_jalan">Rawat Jalan Saja</option>
+          <option value="igd">IGD Saja</option>
           <option value="rawat_inap">Rawat Inap</option>
-          <option value="igd">IGD</option>
         </select>
       </div>
       <div>
