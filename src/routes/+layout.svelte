@@ -46,9 +46,10 @@
       id: 'backOffice',
       title: 'Back Office',
       items: [
-        { label: 'Laporan', href: '/laporan', icon: 'bar-chart-3' },
-        { label: 'Bridging BPJS', href: '/bridging/bpjs', icon: 'link' },
-        { label: 'SatuSehat', href: '/bridging/satusehat', icon: 'cloud' }
+        { label: 'Laporan', href: '/laporan', icon: 'bar-chart-3' }
+        // Hidden: Bridging BPJS & SatuSehat
+        // { label: 'Bridging BPJS', href: '/bridging/bpjs', icon: 'link' },
+        // { label: 'SatuSehat', href: '/bridging/satusehat', icon: 'cloud' }
       ]
     },
     {
