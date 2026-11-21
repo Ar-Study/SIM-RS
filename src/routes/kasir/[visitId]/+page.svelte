@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatCurrency, formatDate, formatDateTime, generateId } from '$lib/utils/helpers.js';
+  import { formatCurrency, formatDate, formatDateTime, generateId, withBasePath } from '$lib/utils/helpers.js';
   import { PAYOR_TYPES } from '$lib/utils/constants.js';
 
   let visitId = $derived(page.params.visitId);
@@ -138,7 +138,7 @@
   }
 
   function goBack() {
-    goto('/kasir');
+    goto(withBasePath('/kasir'));
   }
 
   onMount(async () => {

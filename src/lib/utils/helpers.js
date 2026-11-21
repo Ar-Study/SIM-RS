@@ -1,3 +1,13 @@
+import { base } from '$app/paths';
+
+/** Prefix an app-relative path with the configured SvelteKit base path. */
+export function withBasePath(path) {
+  if (!path?.startsWith('/')) return path;
+  if (!base || base === '/') return path;
+  if (path === base || path.startsWith(`${base}/`)) return path;
+  return `${base}${path}`;
+}
+
 export function formatDate(date) {
   if (!date) return '-';
   return new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });

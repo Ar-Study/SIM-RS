@@ -4,6 +4,7 @@
   import { page } from '$app/state';
   import { supabase } from '$lib/supabase';
   import { getCurrentUser, signOut } from '$lib/auth';
+  import { withBasePath } from '$lib/utils/helpers';
   import { onMount } from 'svelte';
   import Toast from '$lib/Toast.svelte';
   import '../app.css';
@@ -58,13 +59,6 @@
       ]
     }
   ];
-
-  function withBasePath(path) {
-    if (!path?.startsWith('/')) return path;
-    if (!base || base === '/') return path;
-    if (path === base || path.startsWith(`${base}/`)) return path;
-    return `${base}${path}`;
-  }
 
   function stripBasePath(pathname) {
     if (!base || base === '/') return pathname;

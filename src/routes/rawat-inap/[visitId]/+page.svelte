@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatCurrency, formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { PAYOR_TYPES, DISCHARGE_CONDITIONS } from '$lib/utils/constants.js';
   import { addLabBill, addRadiologyBill, addDrugBill, removeBillBySource } from '$lib/billing.js';
 
@@ -551,13 +551,13 @@
 
       await fetchVisitData();
       alert('Pasien berhasil dipulangkan');
-      goto('/rawat-inap');
+      goto(withBasePath('/rawat-inap'));
     } catch (err) { console.error('Discharge error:', err); alert(`Gagal memulangkan pasien: ${err.message || err}`); }
     finally { saving = false; }
   }
 
   function goBack() {
-    goto('/rawat-inap');
+    goto(withBasePath('/rawat-inap'));
   }
 
   function printResume() {

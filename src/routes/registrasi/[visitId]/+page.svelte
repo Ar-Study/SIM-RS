@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES, STATUS_PEMBAYARAN, STATUS_PERIKSA, STATUS_KELUAR } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -113,7 +113,7 @@
 <div class="max-w-5xl mx-auto space-y-6">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div class="flex items-center gap-3">
-      <button onclick={() => goto('/registrasi')} class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors" title="Kembali">
+      <button onclick={() => goto(withBasePath('/registrasi'))} class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors" title="Kembali">
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
         </svg>
@@ -125,7 +125,7 @@
     </div>
 
     {#if visit}
-      <button onclick={() => goto(`/registrasi/${visit.visit_id}/edit`)} class="btn-primary inline-flex items-center gap-2">
+      <button onclick={() => goto(withBasePath(`/registrasi/${visit.visit_id}/edit`))} class="btn-primary inline-flex items-center gap-2">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
         </svg>

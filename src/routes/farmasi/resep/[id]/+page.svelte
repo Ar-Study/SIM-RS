@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatCurrency, formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { addDrugBill } from '$lib/billing.js';
 
   let visitId = $derived(page.params.id);
@@ -134,7 +134,7 @@
       }
 
       await fetchPrescriptions();
-      goto('/farmasi');
+      goto(withBasePath('/farmasi'));
     } catch (err) {
       console.error('Dispense error:', err);
       alert('Gagal menyerahkan resep. Silakan coba lagi.');
@@ -149,7 +149,7 @@
   }
 
   function goBack() {
-    goto('/farmasi');
+    goto(withBasePath('/farmasi'));
   }
 
   onMount(async () => {

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabase.js';
-  import { generateVisitId, formatDate } from '$lib/utils/helpers.js';
+  import { generateVisitId, formatDate, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES } from '$lib/utils/constants.js';
   import { addConsultationBill } from '$lib/billing.js';
 
@@ -305,7 +305,7 @@
 
       success = 'Registrasi berhasil disimpan (ID Kunjungan: ' + visitData.visit_id + ')';
       setTimeout(() => {
-        goto('/registrasi');
+        goto(withBasePath('/registrasi'));
       }, 1000);
     } catch (err) {
       console.error('Save registration error:', err);

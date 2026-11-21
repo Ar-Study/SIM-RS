@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { toast } from '$lib/toast.svelte.js';
 
   // State
@@ -311,7 +311,7 @@
       }
 
       toast('Pasien berhasil di-admit ke Rawat Inap!', 'success');
-      goto('/rawat-inap');
+      goto(withBasePath('/rawat-inap'));
     } catch (err) {
       console.error('Admit error:', err);
       error = err.message || 'Gagal memproses admit rawat inap.';

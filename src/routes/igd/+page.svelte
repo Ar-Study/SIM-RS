@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { TRIAGE_LEVELS } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -135,7 +135,7 @@
   }
 
   function goDetail(visitId) {
-    goto(`/igd/${visitId}`);
+    goto(withBasePath(`/igd/${visitId}`));
   }
 
   async function refreshAll() {

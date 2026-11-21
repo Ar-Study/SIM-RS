@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
 
   let loading = $state(true);
   let saving = $state(false);
@@ -288,7 +288,7 @@
 
       success = 'Perubahan registrasi berhasil disimpan';
       setTimeout(() => {
-        goto(`/registrasi/${visit.visit_id}`);
+        goto(withBasePath(`/registrasi/${visit.visit_id}`));
       }, 900);
     } catch (err) {
       console.error('Update registration error:', err);
@@ -336,7 +336,7 @@
 
 <div class="max-w-4xl mx-auto space-y-6">
   <div class="flex items-center gap-3">
-    <button onclick={() => goto(`/registrasi/${$page.params.visitId}`)} class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors" title="Kembali">
+    <button onclick={() => goto(withBasePath(`/registrasi/${$page.params.visitId}`))} class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors" title="Kembali">
       <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
       </svg>
@@ -527,7 +527,7 @@
         </div>
 
         <div class="flex items-center justify-end gap-2 pt-2">
-          <button onclick={() => goto(`/registrasi/${visit.visit_id}`)} class="btn-secondary">Batal</button>
+          <button onclick={() => goto(withBasePath(`/registrasi/${visit.visit_id}`))} class="btn-secondary">Batal</button>
           <button onclick={handleSave} disabled={saving} class="btn-primary inline-flex items-center gap-2">
             {#if saving}
               <span class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>

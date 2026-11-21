@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES, STATUS_PEMBAYARAN, STATUS_PERIKSA } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -155,11 +155,11 @@
     }
   }
   function viewDetail(visitId) {
-    goto(`/registrasi/${visitId}`);
+    goto(withBasePath(`/registrasi/${visitId}`));
   }
 
   function editRegistration(visitId) {
-    goto(`/registrasi/${visitId}/edit`);
+    goto(withBasePath(`/registrasi/${visitId}/edit`));
   }
 
   function printTicket(visit) {

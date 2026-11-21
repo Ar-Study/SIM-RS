@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatCurrency, formatDate, generateId } from '$lib/utils/helpers.js';
+  import { formatCurrency, formatDate, generateId, withBasePath } from '$lib/utils/helpers.js';
   import { DRUG_CATEGORIES } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -215,7 +215,7 @@
       <h1 class="text-2xl font-bold text-gray-900">Penjualan Obat Bebas</h1>
       <p class="text-sm text-gray-500 mt-1">Transaksi penjualan obat tanpa resep</p>
     </div>
-    <button class="btn-secondary btn-sm" onclick={() => goto('/farmasi')}>
+    <button class="btn-secondary btn-sm" onclick={() => goto(withBasePath('/farmasi'))}>
       <svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
       </svg>

@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatCurrency, formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { TRIAGE_LEVELS, PAYOR_TYPES, TARIFF_TYPES } from '$lib/utils/constants.js';
   import { addLabBill, addRadiologyBill, addDrugBill, removeBillBySource } from '$lib/billing.js';
   import { toast } from '$lib/toast.svelte.js';
@@ -801,7 +801,7 @@
   }
 
   function goBack() {
-    goto('/igd');
+    goto(withBasePath('/igd'));
   }
 
   function printDocument() {

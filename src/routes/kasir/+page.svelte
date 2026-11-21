@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatCurrency, formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES, PAYOR_TYPES, STATUS_PEMBAYARAN } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -188,12 +188,12 @@
   }
 
   function goPayment(visitId) {
-    goto(`/kasir/${visitId}`);
+    goto(withBasePath(`/kasir/${visitId}`));
   }
 
   function viewDetail(invoiceId) {
     const inv = invoices.find(i => i.invoice_id === invoiceId);
-    if (inv) goto(`/kasir/${inv.visit_id}`);
+    if (inv) goto(withBasePath(`/kasir/${inv.visit_id}`));
   }
 
   function printReceipt(invoiceId) {

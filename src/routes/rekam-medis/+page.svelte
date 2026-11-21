@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -64,7 +64,7 @@
   }
 
   function viewHistory(patientId) {
-    goto(`/rekam-medis/${patientId}`);
+    goto(withBasePath(`/rekam-medis/${patientId}`));
   }
 
   async function fetchStats() {

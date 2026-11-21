@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES, PAYOR_TYPES } from '$lib/utils/constants.js';
 
   let patientId = $derived(page.params.patientId);
@@ -417,7 +417,7 @@
   }
 
   function goBack() {
-    goto('/rekam-medis');
+    goto(withBasePath('/rekam-medis'));
   }
 
   onMount(async () => {
