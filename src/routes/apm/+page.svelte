@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { supabase } from '$lib/supabase.js';
   import { formatDate, generateVisitId } from '$lib/utils/helpers.js';
+  import { generateTiket, generateTiketImage } from '$lib/pdf/tiketPDF.js';
 
   let step = $state(1);
   let loading = $state(false);
@@ -15,10 +16,17 @@
   let registering = $state(false);
   let registrationComplete = $state(false);
   let ticketNo = $state('');
+  let queuePosition = $state(0);
+  let visitDateIso = $state('');
+  let autoDownloadFormat = $state('pdf'); // 'pdf' | 'image' | 'off'
+  let autoDownloadNotice = $state('');
   let errorMsg = $state('');
   let inactivityTimer = null;
   let kioskTimer = $state(30);
   let kioskInterval = null;
+
+  let ticketPrefix = $derived(ticketNo.length > 3 ? ticketNo.slice(0, -3) : '');
+  let ticketSuffix = $derived(ticketNo.length > 3 ? ticketNo.slice(-3) : ticketNo);
 
   const TIME_SLOTS = $state([
     '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
@@ -32,21 +40,37 @@
     return TIME_SLOTS.filter(slot => !bookedSlots.includes(slot));
   });
 
-  function resetKioskTimer() {
-    kioskTimer = 30;
+  function stopKioskTimer() {
     if (inactivityTimer) clearTimeout(inactivityTimer);
     if (kioskInterval) clearInterval(kioskInterval);
+    inactivityTimer = null;
+    kioskInterval = null;
+  }
+
+  function resetKioskTimer() {
+    if (step === 6 || registrationComplete) {
+      stopKioskTimer();
+      return;
+    }
+    kioskTimer = 30;
+    stopKioskTimer();
 
     kioskInterval = setInterval(() => {
+      if (step === 6 || registrationComplete) {
+        stopKioskTimer();
+        return;
+      }
       kioskTimer--;
       if (kioskTimer <= 0) {
-        clearInterval(kioskInterval);
+        stopKioskTimer();
         resetToHome();
       }
     }, 1000);
 
     inactivityTimer = setTimeout(() => {
-      resetToHome();
+      if (step !== 6 && !registrationComplete) {
+        resetToHome();
+      }
     }, 30000);
   }
 
@@ -59,10 +83,40 @@
     selectedSlot = null;
     registrationComplete = false;
     ticketNo = '';
+    queuePosition = 0;
+    visitDateIso = '';
+    autoDownloadNotice = '';
     errorMsg = '';
-    if (kioskInterval) clearInterval(kioskInterval);
-    if (inactivityTimer) clearTimeout(inactivityTimer);
+    stopKioskTimer();
     kioskTimer = 30;
+  }
+
+  function setAutoDownloadFormat(format) {
+    autoDownloadFormat = format;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('apm_auto_download', format);
+    }
+  }
+
+  function getTicketPayload() {
+    return {
+      ticketNo,
+      queuePosition,
+      patientName: patient?.full_name || '-',
+      noRm: patient?.no_registration || '-',
+      clinic: selectedClinic?.name || '-',
+      doctor: selectedDoctor ? `dr. ${selectedDoctor.full_name}` : '-',
+      slot: selectedSlot || '-',
+      date: visitDateIso || new Date().toISOString()
+    };
+  }
+
+  function downloadTicketPDF() {
+    generateTiket(getTicketPayload());
+  }
+
+  function downloadTicketImage() {
+    generateTiketImage(getTicketPayload());
   }
 
   function handleActivity() {
@@ -127,8 +181,8 @@
     loading = true;
     try {
       const { data, error } = await supabase
-        .from('users')
-        .select('user_id, full_name, specialization')
+        .from('employees')
+        .select('employee_id, full_name, specialization')
         .eq('role', 'doctor')
         .eq('is_active', true)
         .order('full_name');
@@ -154,29 +208,56 @@
     resetKioskTimer();
     try {
       const visitId = generateVisitId();
-      const ticketNum = Math.floor(1000 + Math.random() * 9000);
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-      const { error } = await supabase
+      const { count } = await supabase
+        .from('patient_visitations')
+        .select('visit_id', { count: 'exact', head: true })
+        .gte('visit_date', startOfDay);
+
+      const seq = (count ?? 0) + 1;
+      const datePrefix =
+        now.getFullYear().toString().slice(-2) +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0');
+
+      const { data: inserted, error } = await supabase
         .from('patient_visitations')
         .insert({
           visit_id: visitId,
           patient_id: patient.patient_id,
-          doctor_id: selectedDoctor.user_id,
+          doctor_id: selectedDoctor.employee_id,
           clinic_id: selectedClinic.clinic_id,
           visit_type: 'rawat_jalan',
-          visit_date: new Date().toISOString(),
-          ticket_no: ticketNum,
-          source: 'kiosk',
+          visit_date: now.toISOString(),
+          description: `APM Mandiri - Jam ${selectedSlot}`,
           status_periksa: '0',
+          status_pembayaran: '0',
           status_keluar: '0'
-        });
+        })
+        .select('visit_id, ticket_no')
+        .single();
 
       if (error) throw error;
 
-      ticketNo = String(ticketNum);
+      const finalSeq = seq || inserted?.ticket_no || 1;
+      queuePosition = finalSeq;
+      visitDateIso = now.toISOString();
+      ticketNo = `${datePrefix}${String(finalSeq).padStart(3, '0')}`;
       registrationComplete = true;
       step = 6;
-      resetKioskTimer();
+      stopKioskTimer();
+
+      if (autoDownloadFormat === 'pdf') {
+        autoDownloadNotice = 'Tiket PDF otomatis diunduh';
+        setTimeout(() => downloadTicketPDF(), 150);
+      } else if (autoDownloadFormat === 'image') {
+        autoDownloadNotice = 'Tiket Gambar (PNG) otomatis diunduh';
+        setTimeout(() => downloadTicketImage(), 150);
+      } else {
+        autoDownloadNotice = '';
+      }
     } catch (err) {
       errorMsg = 'Gagal melakukan registrasi. Silakan hubungi petugas.';
       console.error('Registration error:', err);
@@ -186,6 +267,12 @@
   }
 
   onMount(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('apm_auto_download');
+      if (saved === 'pdf' || saved === 'image' || saved === 'off') {
+        autoDownloadFormat = saved;
+      }
+    }
     resetKioskTimer();
   });
 
@@ -220,9 +307,31 @@
           <p class="text-white/70 text-sm">Anjungan Pasien Mandiri</p>
         </div>
       </div>
-      <div class="text-right text-white/80">
-        <p class="text-sm">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-        <p class="text-xs text-white/50 mt-0.5">Sesi berakhir dalam {kioskTimer}s</p>
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        <div class="flex items-center gap-1 bg-white/10 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+          <span class="text-white/70 mr-1">Auto Download:</span>
+          {#each [
+            { id: 'pdf', label: 'PDF' },
+            { id: 'image', label: 'Image' },
+            { id: 'off', label: 'Off' }
+          ] as opt}
+            <button
+              type="button"
+              class="px-2.5 py-1 rounded-lg font-semibold transition-all {autoDownloadFormat === opt.id ? 'bg-white text-primary-700 shadow-sm' : 'text-white/80 hover:bg-white/10'}"
+              onclick={() => setAutoDownloadFormat(opt.id)}
+            >
+              {opt.label}
+            </button>
+          {/each}
+        </div>
+        <div class="text-right text-white/80">
+          <p class="text-sm">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          {#if step === 6}
+            <p class="text-xs text-emerald-200 mt-0.5">Tiket tetap tampil hingga ditutup manual</p>
+          {:else}
+            <p class="text-xs text-white/50 mt-0.5">Sesi berakhir dalam {kioskTimer}s</p>
+          {/if}
+        </div>
       </div>
     </div>
   </header>
@@ -333,7 +442,7 @@
               </div>
               <div class="bg-gray-50 rounded-xl p-4">
                 <p class="text-xs text-gray-500 uppercase tracking-wide">Tanggal Lahir</p>
-                <p class="text-lg font-semibold text-gray-900 mt-1">{formatDate(patient?.birth_date)}</p>
+                <p class="text-lg font-semibold text-gray-900 mt-1">{formatDate(patient?.date_of_birth)}</p>
               </div>
               <div class="bg-gray-50 rounded-xl p-4">
                 <p class="text-xs text-gray-500 uppercase tracking-wide">No. HP</p>
@@ -434,7 +543,7 @@
                     {#each TIME_SLOTS as slot}
                       <button
                         class="px-3 py-2 rounded-lg text-sm font-medium transition-all
-                          {selectedDoctor?.user_id === doctor.user_id && selectedSlot === slot
+                          {selectedDoctor?.employee_id === doctor.employee_id && selectedSlot === slot
                             ? 'bg-primary-600 text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-primary-50 hover:text-primary-700'}"
                         onclick={() => selectDoctorSlot(doctor, slot)}
@@ -533,13 +642,31 @@
             </div>
 
             <h2 class="text-2xl font-bold text-gray-900 mb-2">Registrasi Berhasil!</h2>
-            <p class="text-gray-500 mb-8">Silakan ambil nomor antrian Anda</p>
+            <p class="text-gray-500 mb-4">Nomor antrian Anda tetap terbuka hingga Anda menutup atau me-refresh halaman ini</p>
+
+            {#if autoDownloadNotice}
+              <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold mb-6">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                {autoDownloadNotice}
+              </div>
+            {/if}
 
             <!-- Ticket -->
             <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-2xl p-8 mb-8 mx-auto max-w-sm">
-              <p class="text-sm text-gray-500 uppercase tracking-wider mb-2">Nomor Antrian</p>
-              <p class="text-6xl font-black text-primary-600 font-mono">{ticketNo}</p>
-              <div class="mt-4 pt-4 border-t border-gray-200 space-y-2 text-sm">
+              <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Nomor Antrian</p>
+              <div class="flex flex-col items-center justify-center leading-none">
+                {#if ticketPrefix}
+                  <span class="text-base sm:text-lg font-mono font-semibold text-gray-400 tracking-[0.25em] mb-1">{ticketPrefix}</span>
+                {/if}
+                <span class="text-7xl sm:text-8xl font-black text-primary-600 font-mono tracking-tight">{ticketSuffix}</span>
+              </div>
+              <div class="mt-6 pt-4 border-t border-gray-200 space-y-2 text-sm">
+                <div class="flex justify-between">
+                  <span class="text-gray-500">Pasien</span>
+                  <span class="font-semibold text-gray-900">{patient?.full_name}</span>
+                </div>
                 <div class="flex justify-between">
                   <span class="text-gray-500">Klinik</span>
                   <span class="font-semibold text-gray-900">{selectedClinic?.name}</span>
@@ -555,21 +682,40 @@
               </div>
             </div>
 
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              <button
+                type="button"
+                class="py-4 px-4 rounded-xl bg-emerald-600 text-white text-base font-bold hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-md"
+                onclick={downloadTicketImage}
+              >
+                Download Image (PNG)
+              </button>
+              <button
+                type="button"
+                class="py-4 px-4 rounded-xl bg-primary-600 text-white text-base font-bold hover:bg-primary-700 active:scale-[0.98] transition-all shadow-md"
+                onclick={downloadTicketPDF}
+              >
+                Download PDF
+              </button>
+            </div>
+
             <button
-              class="w-full py-5 rounded-xl bg-primary-600 text-white text-xl font-bold hover:bg-primary-700 active:scale-[0.98] transition-all shadow-lg mb-3"
+              type="button"
+              class="w-full py-4 rounded-xl bg-slate-800 text-white text-lg font-bold hover:bg-slate-900 active:scale-[0.98] transition-all shadow-md mb-3"
               onclick={() => window.print()}
             >
-              <svg class="w-6 h-6 inline-block mr-2 -mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <svg class="w-5 h-5 inline-block mr-2 -mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m0 0a48.159 48.159 0 018.5 0" />
               </svg>
               Cetak Tiket
             </button>
 
             <button
-              class="w-full py-4 rounded-xl bg-gray-100 text-gray-700 text-lg font-semibold hover:bg-gray-200 active:scale-[0.98] transition-all"
+              type="button"
+              class="w-full py-3.5 rounded-xl bg-gray-100 text-gray-700 text-base font-semibold hover:bg-gray-200 active:scale-[0.98] transition-all"
               onclick={resetToHome}
             >
-              Kembali ke Awal
+              Ambil Antrian Baru
             </button>
           </div>
         </div>
@@ -580,6 +726,8 @@
 
   <!-- Kiosk Footer -->
   <footer class="bg-white/5 border-t border-white/10 py-4 text-center">
-    <p class="text-white/40 text-sm">Sentuh layar kapan saja untuk memperpanjang sesi</p>
+    <p class="text-white/40 text-sm">
+      {step === 6 ? 'Nomor antrian dibiarkan terbuka hingga ditutup atau di-refresh secara manual' : 'Sentuh layar kapan saja untuk memperpanjang sesi'}
+    </p>
   </footer>
 </div>
