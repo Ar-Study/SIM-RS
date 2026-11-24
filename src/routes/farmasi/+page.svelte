@@ -16,7 +16,36 @@
   let showAddDrug = $state(false);
   let showStockLog = $state(false);
   let selectedDrug = $state(null);
+  let loadingLogs = $state(false);
   let saving = $state(false);
+
+  let drugSearch = $state('');
+  let drugCategoryFilter = $state('ALL');
+  let drugPage = $state(1);
+  const DRUG_PAGE_SIZE = 50;
+
+  let drugCategories = $derived.by(() => {
+    const set = new Set(drugs.map(d => d.category).filter(Boolean));
+    return ['ALL', ...Array.from(set).sort()];
+  });
+
+  let filteredDrugs = $derived.by(() => {
+    const q = drugSearch.trim().toLowerCase();
+    return drugs.filter(d => {
+      if (drugCategoryFilter !== 'ALL' && d.category !== drugCategoryFilter) return false;
+      if (!q) return true;
+      return (
+        (d.name && d.name.toLowerCase().includes(q)) ||
+        (d.code && d.code.toLowerCase().includes(q)) ||
+        (d.batch_no && d.batch_no.toLowerCase().includes(q))
+      );
+    });
+  });
+
+  let totalDrugPages = $derived(Math.max(1, Math.ceil(filteredDrugs.length / DRUG_PAGE_SIZE)));
+  let paginatedDrugs = $derived(
+    filteredDrugs.slice((drugPage - 1) * DRUG_PAGE_SIZE, drugPage * DRUG_PAGE_SIZE)
+  );
 
   let newDrug = $state({
     code: '',
@@ -77,12 +106,22 @@
 
   async function fetchDrugs() {
     try {
-      const { data, error } = await supabase
-        .from('drugs')
-        .select('*')
-        .order('name');
-      if (error) throw error;
-      drugs = data || [];
+      const allDrugs = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('drugs')
+          .select('*')
+          .order('name')
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allDrugs.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      drugs = allDrugs;
     } catch (err) {
       console.error('Fetch drugs error:', err);
     }
@@ -162,9 +201,28 @@
     }
   }
 
-  function openStockLog(drug) {
+  async function openStockLog(drug = null) {
     selectedDrug = drug;
     showStockLog = true;
+    loadingLogs = true;
+    stockLogs = [];
+    try {
+      let query = supabase
+        .from('drug_stock_logs')
+        .select('*, drugs:drug_id ( name, unit )')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (drug?.drug_id) {
+        query = query.eq('drug_id', drug.drug_id);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      stockLogs = data || [];
+    } catch (err) {
+      console.error('Fetch stock logs error:', err);
+    } finally {
+      loadingLogs = false;
+    }
   }
 
   async function refreshAll() {
@@ -382,10 +440,27 @@
 
       {:else if activeTab === 'stok'}
         <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-gray-900">Stok Obat</h3>
-            <div class="flex gap-2">
-              <button class="btn-secondary btn-sm" onclick={() => showStockLog = true}>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h3 class="text-lg font-semibold text-gray-900">Stok Obat ({filteredDrugs.length})</h3>
+            <div class="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                class="input-field text-sm w-56"
+                placeholder="Cari nama / kode / batch..."
+                bind:value={drugSearch}
+                oninput={() => drugPage = 1}
+              />
+              <select
+                class="select-field text-sm w-auto"
+                bind:value={drugCategoryFilter}
+                onchange={() => drugPage = 1}
+              >
+                <option value="ALL">Semua Kategori</option>
+                {#each drugCategories.filter(c => c !== 'ALL') as cat}
+                  <option value={cat}>{cat}</option>
+                {/each}
+              </select>
+              <button class="btn-secondary btn-sm" onclick={() => openStockLog(null)}>
                 <svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
@@ -430,10 +505,10 @@
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  {#each drugs as drug, i}
+                  {#each paginatedDrugs as drug, i}
                     {@const drugStatus = getDrugStatus(drug)}
                     <tr class="hover:bg-gray-50 transition-colors">
-                      <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
+                      <td class="table-cell text-gray-400 font-mono text-xs">{(drugPage - 1) * DRUG_PAGE_SIZE + i + 1}</td>
                       <td class="table-cell">
                         <span class="font-mono text-xs font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
                           {drug.code}
@@ -471,6 +546,30 @@
                 </tbody>
               </table>
             </div>
+            {#if totalDrugPages > 1}
+              <div class="flex items-center justify-between pt-3 border-t border-gray-100 text-sm text-gray-600">
+                <span>
+                  Menampilkan {(drugPage - 1) * DRUG_PAGE_SIZE + 1}–{Math.min(drugPage * DRUG_PAGE_SIZE, filteredDrugs.length)} dari {filteredDrugs.length} obat
+                </span>
+                <div class="flex items-center gap-2">
+                  <button
+                    class="btn-secondary btn-sm"
+                    disabled={drugPage <= 1}
+                    onclick={() => drugPage = Math.max(1, drugPage - 1)}
+                  >
+                    Sebelumnya
+                  </button>
+                  <span class="px-2 font-medium">Hal {drugPage} / {totalDrugPages}</span>
+                  <button
+                    class="btn-secondary btn-sm"
+                    disabled={drugPage >= totalDrugPages}
+                    onclick={() => drugPage = Math.min(totalDrugPages, drugPage + 1)}
+                  >
+                    Berikutnya
+                  </button>
+                </div>
+              </div>
+            {/if}
           {/if}
         </div>
 
@@ -656,9 +755,32 @@
             </div>
           </div>
         {/if}
-        <p class="text-sm text-gray-400 text-center py-8">
-          Log perubahan stok akan ditampilkan di sini
-        </p>
+        {#if loadingLogs}
+          <div class="flex items-center justify-center py-8">
+            <div class="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+          </div>
+        {:else if stockLogs.length === 0}
+          <p class="text-sm text-gray-400 text-center py-8">
+            Belum ada riwayat perubahan stok
+          </p>
+        {:else}
+          <div class="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+            {#each stockLogs as log}
+              <div class="py-2.5 flex items-start justify-between gap-3 text-sm">
+                <div>
+                  {#if !selectedDrug && log.drugs?.name}
+                    <p class="font-medium text-gray-900">{log.drugs.name}</p>
+                  {/if}
+                  <p class="text-gray-700">{log.notes || log.reference || '-'}</p>
+                  <p class="text-xs text-gray-400">{formatDateTime(log.created_at)}{log.reference ? ` • Batch: ${log.reference}` : ''}</p>
+                </div>
+                <span class="badge shrink-0 {log.change_type === 'in' ? 'badge-success' : log.change_type === 'out' ? 'badge-danger' : 'badge-warning'}">
+                  {log.change_type === 'in' ? '+' : log.change_type === 'out' ? '-' : ''}{log.quantity}
+                </span>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
       <div class="flex justify-end px-6 py-4 border-t border-gray-200">
         <button class="btn-secondary" onclick={() => { showStockLog = false; selectedDrug = null; }}>Tutup</button>
