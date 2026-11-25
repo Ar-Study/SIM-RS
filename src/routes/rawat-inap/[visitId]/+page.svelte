@@ -5,6 +5,7 @@
   import { supabase } from '$lib/supabase.js';
   import { formatCurrency, formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { PAYOR_TYPES, DISCHARGE_CONDITIONS } from '$lib/utils/constants.js';
+  import { DIAGNOSIS_CATEGORIES, getDiagnosisCategoryInfo, getDiagCatId } from '$lib/utils/diagnosis.js';
   import { addLabBill, addRadiologyBill, addDrugBill, removeBillBySource } from '$lib/billing.js';
 
   let visitId = $derived(page.params.visitId);
@@ -31,6 +32,7 @@
   let newCppt = $state({ subyektif: '', obyektif: '', assessment: '', planning: '', instruksi: '' });
   let diagnosisSearch = $state('');
   let diagnosisResults = $state([]);
+  let selectedDiagnosisType = $state('primer');
   let searchDiagTimeout;
   let labSearch = $state('');
   let labResults = $state([]);
@@ -287,9 +289,9 @@
     clearTimeout(searchDiagTimeout);
     searchDiagTimeout = setTimeout(async () => {
       try {
-        const { data, error } = await supabase.from('diagnoses').select('diagnosis_id, code, name')
+        const { data, error } = await supabase.from('diagnoses').select('diagnosis_id, code, name, category, is_menular')
           .eq('is_active', true)
-          .or(`code.ilike.%${diagnosisSearch}%,name.ilike.%${diagnosisSearch}%`).limit(10);
+          .or(`code.ilike.%${diagnosisSearch}%,name.ilike.%${diagnosisSearch}%,english_name.ilike.%${diagnosisSearch}%,kode_bpjs.ilike.%${diagnosisSearch}%`).limit(15);
         if (error) throw error;
         diagnosisResults = data || [];
       } catch (err) { console.error('Search ICD error:', err); }
@@ -302,7 +304,8 @@
       const { error } = await supabase.from('patient_diagnoses').insert({
         visit_id: visitId,
         diagnosis_id: diagnosisId,
-        diagnosis_type: type
+        diagnosis_type: type,
+        diag_cat: getDiagCatId(type)
       });
       if (error) throw error;
       await fetchDiagnoses();
@@ -842,19 +845,34 @@
                 <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                 </svg>
-                <input type="text" class="input-field pl-10" placeholder="Ketik kode atau nama penyakit..." bind:value={diagnosisSearch} oninput={searchDiagnosis} />
+                <input type="text" class="input-field pl-10" placeholder="Ketik kode ICD-10 / ICD-9 / nama penyakit..." bind:value={diagnosisSearch} oninput={searchDiagnosis} />
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="text-gray-500">Kategori saat menambah:</span>
+                <select class="select-field text-xs py-1 w-auto" bind:value={selectedDiagnosisType}>
+                  {#each DIAGNOSIS_CATEGORIES as cat}
+                    <option value={cat.slug}>{cat.label}</option>
+                  {/each}
+                </select>
               </div>
               {#if diagnosisResults.length > 0}
                 <div class="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-60 overflow-y-auto">
                   {#each diagnosisResults as icd}
-                    <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-                      <div>
+                    <div class="flex items-center justify-between gap-2 px-4 py-3 hover:bg-gray-50">
+                      <div class="min-w-0">
                         <span class="font-mono text-sm font-semibold text-primary-700">{icd.code}</span>
                         <span class="text-sm text-gray-700 ml-2">{icd.name}</span>
+                        {#if icd.category}
+                          <span class="badge badge-gray text-[10px] ml-2">{icd.category}</span>
+                        {/if}
                       </div>
-                      <div class="flex gap-2">
-                        <button class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'primer')}>Primer</button>
-                        <button class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'sekunder')}>Sekunder</button>
+                      <div class="flex shrink-0 gap-1.5">
+                        <button class="text-xs bg-primary-100 text-primary-700 px-2.5 py-1 rounded hover:bg-primary-200 font-medium" onclick={() => addDiagnosis(icd.diagnosis_id, selectedDiagnosisType)}>
+                          + {getDiagnosisCategoryInfo(selectedDiagnosisType).shortLabel}
+                        </button>
+                        {#if selectedDiagnosisType !== 'sekunder'}
+                          <button class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200" onclick={() => addDiagnosis(icd.diagnosis_id, 'sekunder')}>Penunjang</button>
+                        {/if}
                       </div>
                     </div>
                   {/each}
@@ -867,9 +885,10 @@
                 <h4 class="text-sm font-semibold text-gray-700 mb-3">Diagnosis Terdaftar</h4>
                 <div class="space-y-2">
                   {#each diagnoses as diag}
+                    {@const catInfo = getDiagnosisCategoryInfo(diag.diagnosis_type)}
                     <div class="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
                       <div class="flex items-center gap-3">
-                        <span class="badge {diag.diagnosis_type === 'primer' ? 'badge-danger' : 'badge-info'}">{diag.diagnosis_type === 'primer' ? 'Primer' : 'Sekunder'}</span>
+                        <span class="badge {catInfo.badgeClass}">{catInfo.shortLabel}</span>
                         <div>
                           <span class="font-mono text-sm font-semibold text-gray-900">{diag.icd_code}</span>
                           <span class="text-sm text-gray-600 ml-2">{diag.icd_name}</span>

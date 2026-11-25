@@ -28,6 +28,11 @@
   let drugs = $state([]);
   let tariffs = $state([]);
   let diagnoses = $state([]);
+  let diagTotalCount = $state(0);
+  let diagPage = $state(1);
+  const DIAG_PAGE_SIZE = 50;
+  let diagLoading = $state(false);
+  let diagSearchTimer;
   let profiles = $state([]);
 
   const tabs = [
@@ -105,14 +110,46 @@
       : tariffs
   );
 
-  const filteredDiagnoses = $derived(
-    searchQuery
-      ? diagnoses.filter(d =>
-          d.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.name?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : diagnoses
-  );
+  const filteredDiagnoses = $derived(diagnoses);
+  const totalDiagPages = $derived(Math.max(1, Math.ceil(diagTotalCount / DIAG_PAGE_SIZE)));
+
+  async function fetchDiagnosesPage(page = 1, query = '') {
+    diagLoading = true;
+    try {
+      const from = (page - 1) * DIAG_PAGE_SIZE;
+      const to = from + DIAG_PAGE_SIZE - 1;
+      let req = supabase
+        .from('diagnoses')
+        .select('diagnosis_id, code, name, category, description, is_menular, kode_bpjs, is_active', { count: 'exact' })
+        .order('code', { ascending: true })
+        .range(from, to);
+
+      const q = query.trim();
+      if (q) {
+        req = req.or(`code.ilike.%${q}%,name.ilike.%${q}%,english_name.ilike.%${q}%,kode_bpjs.ilike.%${q}%`);
+      }
+
+      const { data, count, error } = await req;
+      if (error) throw error;
+      diagnoses = data || [];
+      diagTotalCount = count ?? diagnoses.length;
+      diagPage = page;
+    } catch (err) {
+      console.error('Fetch diagnoses error:', err);
+    } finally {
+      diagLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (activeTab === 'diagnosis') {
+      const q = searchQuery;
+      clearTimeout(diagSearchTimer);
+      diagSearchTimer = setTimeout(() => {
+        fetchDiagnosesPage(1, q);
+      }, 250);
+    }
+  });
 
   const filteredProfiles = $derived(
     searchQuery
@@ -217,13 +254,8 @@
         );
       }
 
-      // 8. Fetch data Diagnosis
-      const diagRes = await supabase.from('diagnoses').select('*');
-      if (diagRes.data) {
-        diagnoses = [...diagRes.data].sort((a, b) => 
-          (a.code || '').toString().localeCompare((b.code || '').toString(), 'id')
-        );
-      }
+      // 8. Fetch data Diagnosis (halaman pertama, server-side pagination untuk 20.000+ ICD)
+      await fetchDiagnosesPage(1, '');
 
       // 9. Fetch data Profil
       const profRes = await supabase.from('profiles').select('*');
@@ -1147,7 +1179,34 @@
               </tbody>
             </table>
           </div>
-          <p class="text-xs text-gray-400 mt-3">Menampilkan {filteredDiagnoses.length} dari {diagnoses.length} diagnosis</p>
+          <div class="flex items-center justify-between mt-3 text-xs text-gray-500">
+            <span>
+              {#if diagLoading}
+                Memuat data diagnosis...
+              {:else}
+                Menampilkan {diagTotalCount === 0 ? 0 : (diagPage - 1) * DIAG_PAGE_SIZE + 1}–{Math.min(diagPage * DIAG_PAGE_SIZE, diagTotalCount)} dari {diagTotalCount.toLocaleString('id-ID')} diagnosis
+              {/if}
+            </span>
+            {#if totalDiagPages > 1}
+              <div class="flex items-center gap-2">
+                <button
+                  class="btn-secondary btn-sm text-xs"
+                  disabled={diagPage <= 1 || diagLoading}
+                  onclick={() => fetchDiagnosesPage(diagPage - 1, searchQuery)}
+                >
+                  Sebelumnya
+                </button>
+                <span class="font-medium text-gray-700">Hal {diagPage} / {totalDiagPages}</span>
+                <button
+                  class="btn-secondary btn-sm text-xs"
+                  disabled={diagPage >= totalDiagPages || diagLoading}
+                  onclick={() => fetchDiagnosesPage(diagPage + 1, searchQuery)}
+                >
+                  Berikutnya
+                </button>
+              </div>
+            {/if}
+          </div>
 
         <!-- ===================== USER/PROFIL TAB ===================== -->
         {:else if activeTab === 'profil'}
