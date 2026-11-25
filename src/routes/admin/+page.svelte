@@ -30,6 +30,7 @@
   let diagnoses = $state([]);
   let diagTotalCount = $state(0);
   let diagPage = $state(1);
+  let diagCategoryFilter = $state('ALL');
   const DIAG_PAGE_SIZE = 50;
   let diagLoading = $state(false);
   let diagSearchTimer;
@@ -113,7 +114,7 @@
   const filteredDiagnoses = $derived(diagnoses);
   const totalDiagPages = $derived(Math.max(1, Math.ceil(diagTotalCount / DIAG_PAGE_SIZE)));
 
-  async function fetchDiagnosesPage(page = 1, query = '') {
+  async function fetchDiagnosesPage(page = 1, query = '', category = diagCategoryFilter) {
     diagLoading = true;
     try {
       const from = (page - 1) * DIAG_PAGE_SIZE;
@@ -123,6 +124,10 @@
         .select('diagnosis_id, code, name, category, description, is_menular, kode_bpjs, is_active', { count: 'exact' })
         .order('code', { ascending: true })
         .range(from, to);
+
+      if (category && category !== 'ALL') {
+        req = req.eq('category', category);
+      }
 
       const q = query.trim();
       if (q) {
@@ -144,9 +149,10 @@
   $effect(() => {
     if (activeTab === 'diagnosis') {
       const q = searchQuery;
+      const cat = diagCategoryFilter;
       clearTimeout(diagSearchTimer);
       diagSearchTimer = setTimeout(() => {
-        fetchDiagnosesPage(1, q);
+        fetchDiagnosesPage(1, q, cat);
       }, 250);
     }
   });
@@ -1127,6 +1133,23 @@
 
         <!-- ===================== DIAGNOSIS TAB ===================== -->
         {:else if activeTab === 'diagnosis'}
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2 text-sm">
+              <span class="text-gray-500 text-xs font-medium">Filter Kategori:</span>
+              <select
+                class="select-field text-xs py-1.5 w-auto"
+                bind:value={diagCategoryFilter}
+              >
+                <option value="ALL">Semua Kategori</option>
+                <option value="ICD-10">ICD-10</option>
+                <option value="ICD-9-CM">ICD-9-CM</option>
+                <option value="Menular">Menular</option>
+                <option value="Tidak Menular">Tidak Menular</option>
+                <option value="Penyebab Kecelakaan">Penyebab Kecelakaan</option>
+              </select>
+            </div>
+            <span class="text-xs text-gray-400">Total: {diagTotalCount.toLocaleString('id-ID')} diagnosis</span>
+          </div>
           <div class="overflow-x-auto">
             <table class="w-full min-w-[640px]">
               <thead>
