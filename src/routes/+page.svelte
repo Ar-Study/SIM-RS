@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
+  import { getClinicMap } from '$lib/utils/clinics.js';
   import { getCurrentUser } from '$lib/auth.js';
   import { formatCurrency, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES } from '$lib/utils/constants.js';
@@ -134,19 +135,18 @@
             visit_id,
             visit_date,
             visit_type,
+            clinic_id,
             status_periksa,
             status_keluar,
             ticket_no,
-            patients:patient_id ( full_name, no_registration ),
-            clinics:clinic_id ( name )
+            patients:patient_id ( full_name, no_registration )
           `)
           .order('visit_date', { ascending: false })
           .limit(10),
         supabase
           .from('patient_visitations')
           .select(`
-            clinic_id,
-            clinics:clinic_id ( name )
+            clinic_id
           `)
           .gte('visit_date', todayStart.toISOString())
           .lte('visit_date', todayEnd.toISOString())
@@ -159,11 +159,13 @@
       const revenue = (revenueResult.data || []).reduce((sum, inv) => sum + (inv.net_amount || 0), 0);
       todayRevenue = revenue;
 
+      const clinicMap = await getClinicMap();
+
       recentVisits = (recentResult.data || []).map(v => ({
         ...v,
         patient_name: v.patients?.full_name || '-',
         patient_no: v.patients?.no_registration || '-',
-        clinic_name: v.clinics?.name || '-'
+        clinic_name: clinicMap[v.clinic_id] || v.clinic_id || '-'
       }));
 
       bedAvailability = (bedsResult.data || []).map(rc => {
@@ -182,7 +184,7 @@
 
       const clinicCounts = {};
       (clinicResult.data || []).forEach(v => {
-        const name = v.clinics?.name || 'Tidak Diketahui';
+        const name = clinicMap[v.clinic_id] || v.clinic_id || 'Tidak Diketahui';
         clinicCounts[name] = (clinicCounts[name] || 0) + 1;
       });
       clinicStats = Object.entries(clinicCounts)

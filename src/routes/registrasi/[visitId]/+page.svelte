@@ -65,7 +65,6 @@
             address,
             insurance_number
           ),
-          clinics:clinic_id ( clinic_id, name ),
           employees:doctor_id ( employee_id, full_name ),
           payors:payor_id ( payor_id, name, type ),
           room_classes:class_id ( class_id, name ),

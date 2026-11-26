@@ -8,6 +8,7 @@
   let visits = $state([]);
   let clinics = $state([]);
   let selectedClinic = $state('');
+  let selectedDate = $state('');
   let searchQuery = $state('');
   let queueBoard = $state([]);
   let now = $state(new Date());
@@ -55,12 +56,7 @@
 
   async function fetchVisits() {
     try {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-
-      const { data, error } = await supabase
+      let query = supabase
         .from('patient_visitations')
         .select(`
           visit_id,
@@ -76,21 +72,29 @@
           room_id,
           bed_id,
           patients:patient_id ( full_name, no_registration ),
-          clinics:clinic_id ( name ),
           employees:doctor_id ( full_name ) 
         `)
         .in('visit_type', ['rawat_jalan', 'igd'])
-        .gte('visit_date', todayStart.toISOString())
-        .lte('visit_date', todayEnd.toISOString())
-        .order('visit_date', { ascending: true });
+        .order('visit_date', { ascending: false })
+        .limit(200);
+
+      if (selectedDate) {
+        const start = new Date(selectedDate + 'T00:00:00');
+        const end = new Date(selectedDate + 'T23:59:59.999');
+        query = query.gte('visit_date', start.toISOString()).lte('visit_date', end.toISOString());
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
+
+      const clinicMap = Object.fromEntries(clinics.map(c => [c.clinic_id, c.name]));
 
       // REVISI: Sesuaikan pemetaan dengan perubahan nama kolom di atas
       visits = (data || []).map(v => {
         const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
-        const clinic = Array.isArray(v.clinics) ? v.clinics[0] : v.clinics;
         const doctor = Array.isArray(v.employees) ? v.employees[0] : v.employees;
+        const clinic = { name: clinicMap[v.clinic_id] || (v.clinic_id === 'POL-IGD' ? 'IGD' : v.clinic_id) };
 
         return {
           ...v,
@@ -278,13 +282,39 @@
               />
             </div>
           </div>
-          <div class="w-full sm:w-56">
+          <div class="w-full sm:w-44">
             <select class="select-field" bind:value={selectedClinic}>
               <option value="">Semua Poli</option>
               {#each clinics as clinic}
                 <option value={clinic.clinic_id}>{clinic.name}</option>
               {/each}
             </select>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input
+              type="date"
+              class="input-field w-40 text-sm"
+              bind:value={selectedDate}
+              onchange={fetchVisits}
+              title="Filter tanggal kunjungan (kosongkan untuk semua tanggal)"
+            />
+            {#if selectedDate}
+              <button
+                type="button"
+                class="btn-secondary btn-sm text-xs whitespace-nowrap"
+                onclick={() => { selectedDate = ''; fetchVisits(); }}
+              >
+                Semua
+              </button>
+            {:else}
+              <button
+                type="button"
+                class="btn-secondary btn-sm text-xs whitespace-nowrap"
+                onclick={() => { selectedDate = new Date().toISOString().split('T')[0]; fetchVisits(); }}
+              >
+                Hari Ini
+              </button>
+            {/if}
           </div>
         </div>
 

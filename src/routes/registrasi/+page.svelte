@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabase.js';
+  import { getClinicMap } from '$lib/utils/clinics.js';
   import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES, STATUS_PEMBAYARAN, STATUS_PERIKSA } from '$lib/utils/constants.js';
 
@@ -11,7 +12,7 @@
 
   let searchQuery = $state('');
   let filterType = $state('all');
-  let filterDate = $state(new Date().toISOString().split('T')[0]);
+  let filterDate = $state('');
 
   let currentPage = $state(1);
   const perPage = 15;
@@ -85,6 +86,7 @@
           visit_id,
           visit_date,
           visit_type,
+          clinic_id,
           ticket_no,
           status_periksa,
           status_pembayaran,
@@ -94,7 +96,6 @@
             no_registration,
             nik
           ),
-          clinics:clinic_id ( name ),
           employees:doctor_id ( full_name ) 
         `, { count: 'exact' });
 
@@ -130,9 +131,10 @@
 
       if (error) throw error;
 
+      const clinicMap = await getClinicMap();
+
       registrations = (data || []).map(v => {
         const patient = Array.isArray(v.patients) ? v.patients[0] : v.patients;
-        const clinic = Array.isArray(v.clinics) ? v.clinics[0] : v.clinics;
         const doctor = Array.isArray(v.employees) ? v.employees[0] : v.employees;
 
         return {
@@ -140,7 +142,7 @@
           patient_name: patient?.full_name || '-',
           patient_no: patient?.no_registration || '-',
           patient_nik: patient?.nik || '-',
-          clinic_name: clinic?.name || '-',
+          clinic_name: clinicMap[v.clinic_id] || v.clinic_id || '-',
           doctor_name: doctor?.full_name || '-'
         };
       });
@@ -259,7 +261,14 @@
         </select>
       </div>
       <div>
-        <label class="label" for="filterDate">Tanggal</label>
+        <div class="flex items-center justify-between mb-1">
+          <label class="label mb-0" for="filterDate">Tanggal</label>
+          <div class="flex gap-1.5 text-xs">
+            <button type="button" class="text-primary-600 hover:underline font-medium" onclick={() => { filterDate = today; handleFilter(); }}>Hari Ini</button>
+            <span class="text-gray-300">|</span>
+            <button type="button" class="text-gray-500 hover:underline" onclick={() => { filterDate = ''; handleFilter(); }}>Semua</button>
+          </div>
+        </div>
         <input
           id="filterDate"
           type="date"

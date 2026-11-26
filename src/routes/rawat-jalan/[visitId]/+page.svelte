@@ -104,7 +104,6 @@
         .select(`
           *,
           patients:patient_id ( patient_id, full_name, no_registration, date_of_birth, gender, phone, address ),
-          clinics:clinic_id ( clinic_id, name ),
           employees:doctor_id ( employee_id, full_name ) 
         `) // REVISI: Menggunakan tabel employees, employee_id, dan fullname
         .eq('visit_id', visitId)

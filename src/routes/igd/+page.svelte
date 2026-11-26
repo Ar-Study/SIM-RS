@@ -83,14 +83,11 @@
     return { label: 'Menunggu', class: 'badge-warning' };
   }
 
+  let selectedDate = $state('');
+
   async function fetchVisits() {
     try {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-
-      const { data, error } = await supabase
+      let query = supabase
         .from('patient_visitations')
         .select(`
           visit_id,
@@ -106,9 +103,16 @@
           doctors:doctor_id ( full_name )
         `)
         .eq('visit_type', 'igd')
-        .gte('visit_date', todayStart.toISOString())
-        .lte('visit_date', todayEnd.toISOString())
-        .order('visit_date', { ascending: false });
+        .order('visit_date', { ascending: false })
+        .limit(200);
+
+      if (selectedDate) {
+        const start = new Date(selectedDate + 'T00:00:00');
+        const end = new Date(selectedDate + 'T23:59:59.999');
+        query = query.gte('visit_date', start.toISOString()).lte('visit_date', end.toISOString());
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -175,7 +179,23 @@
         </div>
       </div>
     </div>
-    <div class="flex items-center gap-3">
+    <div class="flex flex-wrap items-center gap-2">
+      <input
+        type="date"
+        class="input-field w-40 text-sm py-1.5"
+        bind:value={selectedDate}
+        onchange={fetchVisits}
+        title="Filter tanggal IGD (kosongkan untuk semua tanggal)"
+      />
+      {#if selectedDate}
+        <button type="button" class="btn-secondary btn-sm text-xs" onclick={() => { selectedDate = ''; fetchVisits(); }}>
+          Semua
+        </button>
+      {:else}
+        <button type="button" class="btn-secondary btn-sm text-xs" onclick={() => { selectedDate = new Date().toISOString().split('T')[0]; fetchVisits(); }}>
+          Hari Ini
+        </button>
+      {/if}
       <button class="btn-secondary btn-sm" onclick={refreshAll}>
         <svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />

@@ -68,8 +68,7 @@
           res_encounter,
           res_condition,
           res_observation,
-          patients:patient_id ( full_name, no_registration ),
-          clinics:clinic_id ( name )
+          patients:patient_id ( full_name, no_registration )
         `)
         .order('visit_date', { ascending: false })
         .limit(50);

@@ -38,8 +38,7 @@
         .select(`
           *,
           patients:patient_id ( patient_id, full_name, no_registration, date_of_birth, gender, phone, address ),
-          doctors:doctor_id ( employee_id, full_name ),
-          clinics:clinic_id ( clinic_id, name )
+          doctors:doctor_id ( employee_id, full_name )
         `)
         .eq('visit_id', visitId)
         .single();

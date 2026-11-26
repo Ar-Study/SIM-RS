@@ -138,14 +138,11 @@
     }
   }
 
+  let selectedDate = $state('');
+
   async function fetchVisits() {
     try {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-
-      const { data, error } = await supabase
+      let query = supabase
         .from('patient_visitations')
         .select(`
           visit_id,
@@ -160,9 +157,16 @@
           employees:doctor_id ( full_name )
         `)
         .eq('clinic_id', okClinicId)
-        .gte('visit_date', todayStart.toISOString())
-        .lte('visit_date', todayEnd.toISOString())
-        .order('visit_date', { ascending: true });
+        .order('visit_date', { ascending: false })
+        .limit(200);
+
+      if (selectedDate) {
+        const start = new Date(selectedDate + 'T00:00:00');
+        const end = new Date(selectedDate + 'T23:59:59.999');
+        query = query.gte('visit_date', start.toISOString()).lte('visit_date', end.toISOString());
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       visits = (data || []).map(v => {

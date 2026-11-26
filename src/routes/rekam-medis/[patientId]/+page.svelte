@@ -91,7 +91,6 @@
         .from('patient_visitations')
         .select(`
           *,
-          clinics:clinic_id ( name ),
           doctors:doctor_id ( full_name )
         `)
         .eq('patient_id', patientId)

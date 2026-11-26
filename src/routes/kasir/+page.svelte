@@ -102,7 +102,6 @@
           doctor_id,
           payor_id,
           patients:patient_id ( full_name, no_registration ),
-          clinics:clinic_id ( name ),
           doctors:doctor_id ( full_name ),
           payors:payor_id ( type )
         `)
@@ -167,8 +166,7 @@
           patient_visitations:visit_id (
             visit_id,
             visit_type,
-            patients:patient_id ( full_name, no_registration ),
-            clinics:clinic_id ( name )
+            patients:patient_id ( full_name, no_registration )
           )
         `)
         .order('created_at', { ascending: false });

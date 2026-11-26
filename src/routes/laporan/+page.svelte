@@ -61,7 +61,7 @@
           .eq('is_active', true),
         supabase
           .from('patient_visitations')
-          .select('visit_id, visit_date, visit_type, clinic_id, clinics:clinic_id(name), payor_type, total_cost')
+          .select('visit_id, visit_date, visit_type, clinic_id, payor_type, total_cost')
           .gte('visit_date', firstDay.toISOString())
           .lte('visit_date', lastDay.toISOString()),
         supabase
@@ -209,7 +209,7 @@
       } else if (rlType === '3.2') {
         const { data } = await supabase
           .from('patient_visitations')
-          .select('visit_id, visit_date, status_keluar, diagnosis_masuk, clinics:clinic_id(name), rooms:room_id(room_number, room_classes:class_id(name))')
+          .select('visit_id, visit_date, status_keluar, diagnosis_masuk, rooms:room_id(room_number, room_classes:class_id(name))')
           .eq('visit_type', 'rawat_inap')
           .gte('visit_date', from.toISOString())
           .lte('visit_date', to.toISOString());
@@ -306,7 +306,7 @@
 
       const { data } = await supabase
         .from('billing_invoices')
-        .select('net_amount, paid_at, status, visit_id, patient_visitations:visit_id(payor_type, clinics:clinic_id(name))')
+        .select('net_amount, paid_at, status, visit_id, patient_visitations:visit_id(payor_type)')
         .eq('status', 'paid')
         .gte('paid_at', fromDate.toISOString())
         .lte('paid_at', now.toISOString());

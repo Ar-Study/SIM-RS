@@ -130,8 +130,7 @@
           visit_date,
           ticket_no,
           source,
-          patients:patient_id ( full_name, no_registration ),
-          clinics:clinic_id ( name )
+          patients:patient_id ( full_name, no_registration )
         `)
         .eq('source', 'mobile_jkn')
         .order('visit_date', { ascending: false })

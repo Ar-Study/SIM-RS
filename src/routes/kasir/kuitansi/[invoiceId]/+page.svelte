@@ -35,7 +35,6 @@
             visit_date,
             visit_type,
             patients:patient_id ( full_name, no_registration ),
-            clinics:clinic_id ( name ),
             doctors:doctor_id ( full_name )
           )
         `)

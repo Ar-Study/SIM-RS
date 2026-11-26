@@ -81,7 +81,6 @@
             address,
             blood_type
           ),
-          clinics:clinic_id ( clinic_id, name ),
           employees:doctor_id ( employee_id, full_name ),
           payors:payor_id ( name, type )
         `)
@@ -146,7 +145,6 @@
             address,
             blood_type
           ),
-          clinics:clinic_id ( clinic_id, name ),
           employees:doctor_id ( employee_id, full_name ),
           payors:payor_id ( name, type )
         `)
