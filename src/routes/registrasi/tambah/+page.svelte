@@ -634,9 +634,10 @@
           <label class="label" for="clinic">Poli / Klinik Tujuan <span class="text-red-500">*</span></label>
           <select id="clinic" bind:value={clinicId} class="select-field">
             <option value="">- Pilih Poli / IGD -</option>
+            <option value="POL-IGD">IGD (Gawat Darurat)</option>
             {#each clinics as c}
               <option value={c.clinic_id}>
-                {c.name} {c.clinic_id === 'POL-IGD' || c.name.toLowerCase().includes('igd') ? '(Gawat Darurat)' : ''}
+                {c.name}
               </option>
             {/each}
           </select>
