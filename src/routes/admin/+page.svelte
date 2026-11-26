@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { generateId, formatCurrency } from '$lib/utils/helpers.js';
+  import { generateId, formatCurrency, formatDate } from '$lib/utils/helpers.js';
   import { ROLES, DRUG_CATEGORIES, TARIFF_TYPES } from '$lib/utils/constants.js';
 
   let activeTab = $state('karyawan');
@@ -42,9 +42,17 @@
   let diagLoading = $state(false);
   let diagSearchTimer;
   let profiles = $state([]);
+  let patients = $state([]);
+  let patientTotalCount = $state(0);
+  let patientPage = $state(1);
+  let patientGenderFilter = $state('ALL');
+  const PATIENT_PAGE_SIZE = 50;
+  let patientLoading = $state(false);
+  let patientSearchTimer;
 
   const tabs = [
     { id: 'karyawan', label: 'Karyawan', icon: 'users' },
+    { id: 'pasien', label: 'Pasien', icon: 'patient' },
     { id: 'poli', label: 'Poli', icon: 'building' },
     { id: 'kamar', label: 'Kamar & Bed', icon: 'bed' },
     { id: 'obat', label: 'Obat', icon: 'pill' },
@@ -214,6 +222,51 @@
       : profiles
   );
 
+  const totalPatientPages = $derived(Math.max(1, Math.ceil(patientTotalCount / PATIENT_PAGE_SIZE)));
+
+  async function fetchPatientsPage(page = 1, query = '', gender = patientGenderFilter) {
+    patientLoading = true;
+    try {
+      const from = (page - 1) * PATIENT_PAGE_SIZE;
+      const to = from + PATIENT_PAGE_SIZE - 1;
+      let req = supabase
+        .from('patients')
+        .select('patient_id, no_registration, full_name, gender, date_of_birth, nik, phone, address, blood_type, insurance_number, created_at', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (gender && gender !== 'ALL') {
+        req = req.eq('gender', gender);
+      }
+
+      const q = query.trim();
+      if (q) {
+        req = req.or(`full_name.ilike.%${q}%,no_registration.ilike.%${q}%,nik.ilike.%${q}%,phone.ilike.%${q}%`);
+      }
+
+      const { data, count, error } = await req;
+      if (error) throw error;
+      patients = data || [];
+      patientTotalCount = count ?? patients.length;
+      patientPage = page;
+    } catch (err) {
+      console.error('Fetch patients error:', err);
+    } finally {
+      patientLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (activeTab === 'pasien') {
+      const q = searchQuery;
+      const g = patientGenderFilter;
+      clearTimeout(patientSearchTimer);
+      patientSearchTimer = setTimeout(() => {
+        fetchPatientsPage(1, q, g);
+      }, 250);
+    }
+  });
+
   const roomOptions = $derived(
     rooms.map(r => {
       const rc = roomClasses.find(rc => rc.class_id === r.class_id);
@@ -313,6 +366,9 @@
         );
       }
 
+      // 10. Fetch data Pasien (halaman pertama, server-side pagination)
+      await fetchPatientsPage(1, '', 'ALL');
+
     } catch (err) {
       console.error('Fetch error global:', err);
     } finally {
@@ -371,6 +427,19 @@
           satusehat_practitioner_id: '',
           is_active: true
         };
+      case 'pasien':
+        return {
+          patient_id: generateId('PAS'),
+          no_registration: 'RM-' + String(Date.now()).slice(-6),
+          full_name: '',
+          gender: 'L',
+          date_of_birth: '',
+          nik: '',
+          phone: '',
+          address: '',
+          blood_type: '',
+          insurance_number: ''
+        };
       case 'poli':
         return { clinic_id: generateId('POL'), name: '', description: '', is_active: true };
       case 'room_class':
@@ -400,6 +469,12 @@
         if (!formData.role) errors.role = 'Role wajib dipilih';
         if (formData.gender && !['L', 'P'].includes(formData.gender)) errors.gender = 'Gender tidak valid';
         if (!formData.phone?.trim()) errors.phone = 'Telepon wajib diisi';
+        break;
+      case 'pasien':
+        if (!formData.no_registration?.trim()) errors.no_registration = 'No. RM wajib diisi';
+        if (!formData.full_name?.trim()) errors.full_name = 'Nama lengkap wajib diisi';
+        if (!formData.gender || !['L', 'P'].includes(formData.gender)) errors.gender = 'Jenis kelamin wajib dipilih';
+        if (!formData.date_of_birth) errors.date_of_birth = 'Tanggal lahir wajib diisi';
         break;
       case 'poli':
         if (!formData.name?.trim()) errors.name = 'Nama poli wajib diisi';
@@ -451,6 +526,7 @@
     try {
       const tableMap = {
         karyawan: 'employees',
+        pasien: 'patients',
         poli: 'clinics',
         room_class: 'room_classes',
         room: 'rooms',
@@ -499,6 +575,13 @@
           payload.department = payload.department || null;
           payload.satusehat_practitioner_id = payload.satusehat_practitioner_id || null;
         }
+        if (modalEntity === 'pasien') {
+          payload.nik = payload.nik || null;
+          payload.phone = payload.phone || null;
+          payload.address = payload.address || null;
+          payload.blood_type = payload.blood_type || null;
+          payload.insurance_number = payload.insurance_number || null;
+        }
         if (modalEntity === 'room') {
           payload.clinic_id = payload.clinic_id || null;
         }
@@ -514,6 +597,7 @@
       } else {
         const idField = {
           karyawan: 'employee_id',
+          pasien: 'patient_id',
           poli: 'clinic_id',
           room_class: 'class_id',
           room: 'room_id',
@@ -565,6 +649,7 @@
     try {
       const tableMap = {
         karyawan: 'employees',
+        pasien: 'patients',
         poli: 'clinics',
         room_class: 'room_classes',
         room: 'rooms',
@@ -577,6 +662,7 @@
 
       const idField = {
         karyawan: 'employee_id',
+        pasien: 'patient_id',
         poli: 'clinic_id',
         room_class: 'class_id',
         room: 'room_id',
@@ -680,6 +766,20 @@
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
+              />
+            </svg>
+          {:else if tab.icon === "patient"}
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z"
               />
             </svg>
           {:else if tab.icon === "building"}
@@ -1032,6 +1132,109 @@
           <p class="text-xs text-gray-400 mt-3">
             Menampilkan {filteredEmployees.length} dari {employees.length} karyawan
           </p>
+
+          <!-- ===================== PASIEN TAB ===================== -->
+        {:else if activeTab === "pasien"}
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2 text-sm">
+              <span class="text-gray-500 text-xs font-medium">Filter Gender:</span>
+              <select class="select-field text-xs py-1.5 w-auto" bind:value={patientGenderFilter}>
+                <option value="ALL">Semua</option>
+                <option value="L">Laki-laki (L)</option>
+                <option value="P">Perempuan (P)</option>
+              </select>
+            </div>
+            <span class="text-xs text-gray-400">Total: {patientTotalCount.toLocaleString("id-ID")} pasien</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[720px]">
+              <thead>
+                <tr class="table-header">
+                  <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">No. RM</th>
+                  <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama Lengkap</th>
+                  <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">NIK</th>
+                  <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">L/P</th>
+                  <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Tgl Lahir</th>
+                  <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Telepon</th>
+                  <th class="table-header px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden xl:table-cell">Alamat</th>
+                  <th class="table-header px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                {#each patients as pat}
+                  <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="table-cell font-mono text-xs font-semibold text-primary-700">{pat.no_registration}</td>
+                    <td class="table-cell font-medium text-gray-900">{pat.full_name}</td>
+                    <td class="table-cell font-mono text-xs text-gray-600 hidden md:table-cell">{pat.nik || "-"}</td>
+                    <td class="table-cell">
+                      <span class="badge {pat.gender === 'L' ? 'badge-info' : 'badge-warning'}">
+                        {pat.gender === "L" ? "Laki-laki" : "Perempuan"}
+                      </span>
+                    </td>
+                    <td class="table-cell text-gray-600 text-xs hidden md:table-cell">{pat.date_of_birth ? formatDate(pat.date_of_birth) : "-"}</td>
+                    <td class="table-cell text-gray-600 text-xs hidden lg:table-cell">{pat.phone || "-"}</td>
+                    <td class="table-cell text-gray-600 text-xs hidden xl:table-cell max-w-xs truncate">{pat.address || "-"}</td>
+                    <td class="table-cell">
+                      <div class="flex items-center justify-center gap-1">
+                        <button
+                          class="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          onclick={() => openEditModal("pasien", pat)}
+                          title="Edit"
+                        >
+                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                          </svg>
+                        </button>
+                        <button
+                          class="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          onclick={() => openDeleteModal("pasien", pat)}
+                          title="Hapus"
+                        >
+                          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                {:else}
+                  <tr>
+                    <td colspan="8" class="table-cell text-center py-12 text-gray-400">
+                      Tidak ada data pasien
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+          <div class="flex items-center justify-between mt-3 text-xs text-gray-500">
+            <span>
+              {#if patientLoading}
+                Memuat data pasien...
+              {:else}
+                Menampilkan {patientTotalCount === 0 ? 0 : (patientPage - 1) * PATIENT_PAGE_SIZE + 1}–{Math.min(patientPage * PATIENT_PAGE_SIZE, patientTotalCount)} dari {patientTotalCount.toLocaleString("id-ID")} pasien
+              {/if}
+            </span>
+            {#if totalPatientPages > 1}
+              <div class="flex items-center gap-2">
+                <button
+                  class="btn-secondary btn-sm text-xs"
+                  disabled={patientPage <= 1 || patientLoading}
+                  onclick={() => fetchPatientsPage(patientPage - 1, searchQuery, patientGenderFilter)}
+                >
+                  Sebelumnya
+                </button>
+                <span class="font-medium text-gray-700">Hal {patientPage} / {totalPatientPages}</span>
+                <button
+                  class="btn-secondary btn-sm text-xs"
+                  disabled={patientPage >= totalPatientPages || patientLoading}
+                  onclick={() => fetchPatientsPage(patientPage + 1, searchQuery, patientGenderFilter)}
+                >
+                  Berikutnya
+                </button>
+              </div>
+            {/if}
+          </div>
 
           <!-- ===================== POLI TAB ===================== -->
         {:else if activeTab === "poli"}
@@ -2227,6 +2430,7 @@
         <h3 class="text-lg font-semibold text-gray-900">
           {modalMode === "add" ? "Tambah" : "Edit"}
           {#if modalEntity === "karyawan"}Data Karyawan
+          {:else if modalEntity === "pasien"}Data Pasien
           {:else if modalEntity === "poli"}Data Poli
           {:else if modalEntity === "room_class"}Kelas Kamar
           {:else if modalEntity === "room"}Data Kamar
@@ -2992,6 +3196,103 @@
               bind:value={formData.phone}
             />
           </div>
+        {:else if modalEntity === "pasien"}
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="label">No. Rekam Medis <span class="text-red-500">*</span></label>
+              <input
+                type="text"
+                class="input-field font-mono"
+                class:border-red-500={formErrors.no_registration}
+                placeholder="RM-000001"
+                bind:value={formData.no_registration}
+              />
+              {#if formErrors.no_registration}<p class="text-xs text-red-500 mt-1">{formErrors.no_registration}</p>{/if}
+            </div>
+            <div>
+              <label class="label">NIK</label>
+              <input
+                type="text"
+                class="input-field font-mono"
+                placeholder="16 digit NIK"
+                bind:value={formData.nik}
+              />
+            </div>
+          </div>
+          <div>
+            <label class="label">Nama Lengkap <span class="text-red-500">*</span></label>
+            <input
+              type="text"
+              class="input-field"
+              class:border-red-500={formErrors.full_name}
+              placeholder="Nama lengkap pasien"
+              bind:value={formData.full_name}
+            />
+            {#if formErrors.full_name}<p class="text-xs text-red-500 mt-1">{formErrors.full_name}</p>{/if}
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="label">Jenis Kelamin <span class="text-red-500">*</span></label>
+              <select
+                class="select-field"
+                class:border-red-500={formErrors.gender}
+                bind:value={formData.gender}
+              >
+                <option value="L">Laki-laki</option>
+                <option value="P">Perempuan</option>
+              </select>
+              {#if formErrors.gender}<p class="text-xs text-red-500 mt-1">{formErrors.gender}</p>{/if}
+            </div>
+            <div>
+              <label class="label">Tanggal Lahir <span class="text-red-500">*</span></label>
+              <input
+                type="date"
+                class="input-field"
+                class:border-red-500={formErrors.date_of_birth}
+                bind:value={formData.date_of_birth}
+              />
+              {#if formErrors.date_of_birth}<p class="text-xs text-red-500 mt-1">{formErrors.date_of_birth}</p>{/if}
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="label">No. Telepon</label>
+              <input
+                type="text"
+                class="input-field"
+                placeholder="08xxxxxxxxxx"
+                bind:value={formData.phone}
+              />
+            </div>
+            <div>
+              <label class="label">Golongan Darah</label>
+              <select class="select-field" bind:value={formData.blood_type}>
+                <option value="">-- Pilih --</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="AB">AB</option>
+                <option value="O">O</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="label">No. BPJS / Asuransi</label>
+            <input
+              type="text"
+              class="input-field font-mono"
+              placeholder="Nomor kartu BPJS / asuransi (opsional)"
+              bind:value={formData.insurance_number}
+            />
+          </div>
+          <div>
+            <label class="label">Alamat</label>
+            <textarea
+              class="input-field"
+              rows="2"
+              placeholder="Alamat lengkap pasien"
+              bind:value={formData.address}
+            ></textarea>
+          </div>
         {/if}
       </div>
 
@@ -3050,6 +3351,7 @@
           <span class="font-semibold text-gray-700">
             {#if deleteTarget}
               {#if deleteEntity === "karyawan"}{deleteTarget.full_name}
+              {:else if deleteEntity === "pasien"}{deleteTarget.no_registration} - {deleteTarget.full_name}
               {:else if deleteEntity === "poli"}{deleteTarget.name}
               {:else if deleteEntity === "room_class"}{deleteTarget.name}
               {:else if deleteEntity === "room"}Kamar {deleteTarget.room_number}
