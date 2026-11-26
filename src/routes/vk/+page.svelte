@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { toast } from '$lib/toast.svelte.js';
 
   let loading = $state(true);
@@ -491,7 +491,7 @@
                   Lanjutkan ke Fase Berikutnya
                 </button>
               {:else}
-                <a href="/rawat-inap/{labor.visit_id || ''}" class="btn-primary btn-sm text-xs flex-1 text-center">Lihat Detail</a>
+                <a href={withBasePath(`/rawat-inap/${labor.visit_id || ''}`)} class="btn-primary btn-sm text-xs flex-1 text-center">Lihat Detail</a>
               {/if}
             </div>
           </div>

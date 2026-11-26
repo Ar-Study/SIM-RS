@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
   import { getCurrentUser } from '$lib/auth.js';
-  import { formatCurrency } from '$lib/utils/helpers.js';
+  import { formatCurrency, withBasePath } from '$lib/utils/helpers.js';
   import { VISIT_TYPES } from '$lib/utils/constants.js';
 
   let user = $state(null);
@@ -327,7 +327,7 @@
     <div class="lg:col-span-2 card">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-900">Kunjungan Terbaru</h2>
-        <a href="/rawat-jalan" class="text-sm text-primary-600 hover:text-primary-700 font-medium">Lihat Semua</a>
+        <a href={withBasePath('/rawat-jalan')} class="text-sm text-primary-600 hover:text-primary-700 font-medium">Lihat Semua</a>
       </div>
       <div class="overflow-x-auto">
         {#if loading}

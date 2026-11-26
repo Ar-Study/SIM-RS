@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate } from '$lib/utils/helpers.js';
+  import { formatDate, withBasePath } from '$lib/utils/helpers.js';
   import { DISCHARGE_CONDITIONS } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -256,7 +256,7 @@
         </svg>
         Refresh
       </button>
-      <a href="/rawat-inap/admit" class="btn-primary btn-sm inline-flex items-center gap-1.5">
+      <a href={withBasePath('/rawat-inap/admit')} class="btn-primary btn-sm inline-flex items-center gap-1.5">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
@@ -451,7 +451,7 @@
                     <td class="table-cell text-gray-600 hidden lg:table-cell">{ip.doctor_name}</td>
                     <td class="table-cell text-right">
                       <a
-                        href="/rawat-inap/{ip.visit_id}"
+                        href={withBasePath(`/rawat-inap/${ip.visit_id}`)}
                         class="btn-primary btn-sm text-xs"
                       >
                         Detail
@@ -617,7 +617,7 @@
                   </p>
                   {#if !bed.is_occupied}
                     <a
-                      href="/rawat-inap/admit?room_id={selectedRoom.room_id}&bed_id={bed.bed_id}"
+                      href={withBasePath(`/rawat-inap/admit?room_id=${selectedRoom.room_id}&bed_id=${bed.bed_id}`)}
                       class="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-100 px-1.5 py-0.5 rounded transition-colors"
                     >
                       Admit &rarr;

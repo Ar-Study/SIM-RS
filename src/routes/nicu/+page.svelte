@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate } from '$lib/utils/helpers.js';
+  import { formatDate, withBasePath } from '$lib/utils/helpers.js';
 
   let loading = $state(true);
   let nicuPatients = $state([]);
@@ -286,7 +286,7 @@
             {/if}
 
             <div class="flex gap-2">
-              <a href="/rawat-inap/{baby.visit_id}" class="btn-primary btn-sm text-xs flex-1 text-center">Detail</a>
+              <a href={withBasePath(`/rawat-inap/${baby.visit_id}`)} class="btn-primary btn-sm text-xs flex-1 text-center">Detail</a>
             </div>
           </div>
         {/each}

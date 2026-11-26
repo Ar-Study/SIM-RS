@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate } from '$lib/utils/helpers.js';
+  import { formatDate, withBasePath } from '$lib/utils/helpers.js';
   import { addLabBill, addRadiologyBill, addDrugBill } from '$lib/billing.js';
   import { toast } from '$lib/toast.svelte.js';
 
@@ -347,7 +347,7 @@
                     <button class="btn-secondary btn-sm text-[10px] px-2 py-1" onclick={() => openQuickAction(ip.visit_id, 'lab')} title="Lab">Lab</button>
                     <button class="btn-secondary btn-sm text-[10px] px-2 py-1" onclick={() => openQuickAction(ip.visit_id, 'radiology')} title="Radiologi">Radiologi</button>
                     <button class="btn-secondary btn-sm text-[10px] px-2 py-1" onclick={() => openQuickAction(ip.visit_id, 'medication')} title="Obat">Obat</button>
-                    <a href="/rawat-inap/{ip.visit_id}" class="btn-primary btn-sm text-[10px] px-2 py-1">Detail</a>
+                    <a href={withBasePath(`/rawat-inap/${ip.visit_id}`)} class="btn-primary btn-sm text-[10px] px-2 py-1">Detail</a>
                   </div>
                 </td>
               </tr>

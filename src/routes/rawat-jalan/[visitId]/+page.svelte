@@ -774,7 +774,7 @@ async function saveAssessment() {
       {/if}
       <div class="ml-auto flex items-center gap-2">
         <a
-          href="/rawat-inap/admit?visit_id={visitId}"
+          href={withBasePath(`/rawat-inap/admit?visit_id=${visitId}`)}
           class="btn-secondary btn-sm inline-flex items-center gap-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-300"
           title="Pindahkan pasien ke Rawat Inap (Admit)"
         >

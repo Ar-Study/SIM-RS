@@ -1,38 +1,48 @@
 <script>
-  import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
-  import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
-  import { VISIT_TYPES, STATUS_PEMBAYARAN, STATUS_PERIKSA, STATUS_KELUAR } from '$lib/utils/constants.js';
+  import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
+  import { supabase } from "$lib/supabase.js";
+  import {
+    formatDate,
+    formatDateTime,
+    withBasePath,
+  } from "$lib/utils/helpers.js";
+  import {
+    VISIT_TYPES,
+    STATUS_PEMBAYARAN,
+    STATUS_PERIKSA,
+    STATUS_KELUAR,
+  } from "$lib/utils/constants.js";
 
   let loading = $state(true);
-  let error = $state('');
+  let error = $state("");
   let visit = $state(null);
 
   function badgePembayaran(status) {
-    if (status === '1') return 'badge-success';
-    if (status === '2') return 'badge-info';
-    return 'badge-danger';
+    if (status === "1") return "badge-success";
+    if (status === "2") return "badge-info";
+    return "badge-danger";
   }
 
   function badgePeriksa(status) {
-    return status === '1' ? 'badge-info' : 'badge-warning';
+    return status === "1" ? "badge-info" : "badge-warning";
   }
 
   function badgeKeluar(status) {
-    return status === '1' ? 'badge-success' : 'badge-warning';
+    return status === "1" ? "badge-success" : "badge-warning";
   }
 
   async function fetchVisitDetail() {
     loading = true;
-    error = '';
+    error = "";
 
     try {
       const visitId = $page.params.visitId;
       const { data, error: fetchError } = await supabase
-        .from('patient_visitations')
-        .select(`
+        .from("patient_visitations")
+        .select(
+          `
           visit_id,
           visit_date,
           booked_date,
@@ -61,40 +71,49 @@
           room_classes:class_id ( class_id, name ),
           rooms:room_id ( room_id, room_number ),
           beds:bed_id ( bed_id, bed_number )
-        `)
-        .eq('visit_id', visitId)
+        `,
+        )
+        .eq("visit_id", visitId)
         .single();
 
       if (fetchError) throw fetchError;
 
-      const patient = Array.isArray(data.patients) ? data.patients[0] : data.patients;
-      const clinic = Array.isArray(data.clinics) ? data.clinics[0] : data.clinics;
-      const doctor = Array.isArray(data.employees) ? data.employees[0] : data.employees;
+      const patient = Array.isArray(data.patients)
+        ? data.patients[0]
+        : data.patients;
+      const clinic = Array.isArray(data.clinics)
+        ? data.clinics[0]
+        : data.clinics;
+      const doctor = Array.isArray(data.employees)
+        ? data.employees[0]
+        : data.employees;
       const payor = Array.isArray(data.payors) ? data.payors[0] : data.payors;
-      const roomClass = Array.isArray(data.room_classes) ? data.room_classes[0] : data.room_classes;
+      const roomClass = Array.isArray(data.room_classes)
+        ? data.room_classes[0]
+        : data.room_classes;
       const room = Array.isArray(data.rooms) ? data.rooms[0] : data.rooms;
       const bed = Array.isArray(data.beds) ? data.beds[0] : data.beds;
 
       visit = {
         ...data,
-        patient_name: patient?.full_name || '-',
-        patient_no: patient?.no_registration || '-',
-        patient_nik: patient?.nik || '-',
-        patient_gender: patient?.gender || '-',
+        patient_name: patient?.full_name || "-",
+        patient_no: patient?.no_registration || "-",
+        patient_nik: patient?.nik || "-",
+        patient_gender: patient?.gender || "-",
         patient_dob: patient?.date_of_birth || null,
-        patient_phone: patient?.phone || '-',
-        patient_address: patient?.address || '-',
-        clinic_name: clinic?.name || '-',
-        doctor_name: doctor?.full_name || '-',
-        payor_name: payor?.name || '-',
-        payor_type: payor?.type || '-',
-        class_name: roomClass?.name || '-',
-        room_number: room?.room_number || '-',
-        bed_number: bed?.bed_number || '-'
+        patient_phone: patient?.phone || "-",
+        patient_address: patient?.address || "-",
+        clinic_name: clinic?.name || "-",
+        doctor_name: doctor?.full_name || "-",
+        payor_name: payor?.name || "-",
+        payor_type: payor?.type || "-",
+        class_name: roomClass?.name || "-",
+        room_number: room?.room_number || "-",
+        bed_number: bed?.bed_number || "-",
       };
     } catch (err) {
-      console.error('Fetch visit detail error:', err);
-      error = err.message || 'Gagal memuat detail registrasi';
+      console.error("Fetch visit detail error:", err);
+      error = err.message || "Gagal memuat detail registrasi";
       visit = null;
     } finally {
       loading = false;
@@ -111,11 +130,27 @@
 </svelte:head>
 
 <div class="max-w-5xl mx-auto space-y-6">
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+  <div
+    class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+  >
     <div class="flex items-center gap-3">
-      <button onclick={() => goto(withBasePath('/registrasi'))} class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors" title="Kembali">
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+      <button
+        onclick={() => goto(withBasePath("/registrasi"))}
+        class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+        title="Kembali"
+      >
+        <svg
+          class="w-5 h-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
+          />
         </svg>
       </button>
       <div>
@@ -125,9 +160,22 @@
     </div>
 
     {#if visit}
-      <button onclick={() => goto(withBasePath(`/registrasi/${visit.visit_id}/edit`))} class="btn-primary inline-flex items-center gap-2">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+      <button
+        onclick={() => goto(withBasePath(`/registrasi/${visit.visit_id}/edit`))}
+        class="btn-primary inline-flex items-center gap-2"
+      >
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"
+          />
         </svg>
         Edit Registrasi
       </button>
@@ -136,7 +184,9 @@
 
   {#if loading}
     <div class="card flex items-center justify-center py-16">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div
+        class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"
+      ></div>
     </div>
   {:else if error}
     <div class="card border border-red-200 bg-red-50">
@@ -146,19 +196,25 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 space-y-6">
         <div class="card">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">Informasi Kunjungan</h2>
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">
+            Informasi Kunjungan
+          </h2>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
               <p class="text-gray-500 text-xs">ID Kunjungan</p>
-              <p class="font-medium text-gray-900 font-mono">{visit.visit_id}</p>
+              <p class="font-medium text-gray-900 font-mono">
+                {visit.visit_id}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">No. Tiket</p>
-              <p class="font-medium text-gray-900">{visit.ticket_no || '-'}</p>
+              <p class="font-medium text-gray-900">{visit.ticket_no || "-"}</p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">Jenis Kunjungan</p>
-              <p class="font-medium text-gray-900">{VISIT_TYPES[visit.visit_type] || visit.visit_type}</p>
+              <p class="font-medium text-gray-900">
+                {VISIT_TYPES[visit.visit_type] || visit.visit_type}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">Poli / Klinik</p>
@@ -170,26 +226,37 @@
             </div>
             <div>
               <p class="text-gray-500 text-xs">Penanggung Biaya</p>
-              <p class="font-medium text-gray-900">{visit.payor_name} {visit.payor_type !== '-' ? `(${visit.payor_type})` : ''}</p>
+              <p class="font-medium text-gray-900">
+                {visit.payor_name}
+                {visit.payor_type !== "-" ? `(${visit.payor_type})` : ""}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">Tanggal Kunjungan</p>
-              <p class="font-medium text-gray-900">{formatDateTime(visit.visit_date)}</p>
+              <p class="font-medium text-gray-900">
+                {formatDateTime(visit.visit_date)}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">Tanggal Booking</p>
-              <p class="font-medium text-gray-900">{formatDate(visit.booked_date)}</p>
+              <p class="font-medium text-gray-900">
+                {formatDate(visit.booked_date)}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">Tanggal Masuk</p>
-              <p class="font-medium text-gray-900">{formatDateTime(visit.in_date)}</p>
+              <p class="font-medium text-gray-900">
+                {formatDateTime(visit.in_date)}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">Tanggal Keluar</p>
-              <p class="font-medium text-gray-900">{formatDateTime(visit.exit_date)}</p>
+              <p class="font-medium text-gray-900">
+                {formatDateTime(visit.exit_date)}
+              </p>
             </div>
 
-            {#if visit.visit_type === 'rawat_inap'}
+            {#if visit.visit_type === "rawat_inap"}
               <div>
                 <p class="text-gray-500 text-xs">Kelas</p>
                 <p class="font-medium text-gray-900">{visit.class_name}</p>
@@ -206,13 +273,17 @@
 
             <div class="sm:col-span-2">
               <p class="text-gray-500 text-xs">Catatan</p>
-              <p class="font-medium text-gray-900">{visit.description || '-'}</p>
+              <p class="font-medium text-gray-900">
+                {visit.description || "-"}
+              </p>
             </div>
           </div>
         </div>
 
         <div class="card">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">Informasi Pasien</h2>
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">
+            Informasi Pasien
+          </h2>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
               <p class="text-gray-500 text-xs">Nama</p>
@@ -220,7 +291,9 @@
             </div>
             <div>
               <p class="text-gray-500 text-xs">No. RM</p>
-              <p class="font-medium text-gray-900 font-mono">{visit.patient_no}</p>
+              <p class="font-medium text-gray-900 font-mono">
+                {visit.patient_no}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">NIK</p>
@@ -228,11 +301,19 @@
             </div>
             <div>
               <p class="text-gray-500 text-xs">Jenis Kelamin</p>
-              <p class="font-medium text-gray-900">{visit.patient_gender === 'L' ? 'Laki-laki' : visit.patient_gender === 'P' ? 'Perempuan' : '-'}</p>
+              <p class="font-medium text-gray-900">
+                {visit.patient_gender === "L"
+                  ? "Laki-laki"
+                  : visit.patient_gender === "P"
+                    ? "Perempuan"
+                    : "-"}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">Tanggal Lahir</p>
-              <p class="font-medium text-gray-900">{formatDate(visit.patient_dob)}</p>
+              <p class="font-medium text-gray-900">
+                {formatDate(visit.patient_dob)}
+              </p>
             </div>
             <div>
               <p class="text-gray-500 text-xs">Telepon</p>
@@ -252,15 +333,23 @@
           <div class="space-y-3">
             <div class="flex items-center justify-between">
               <span class="text-sm text-gray-600">Pembayaran</span>
-              <span class="badge {badgePembayaran(visit.status_pembayaran)}">{STATUS_PEMBAYARAN[visit.status_pembayaran] || 'Belum Bayar'}</span>
+              <span class="badge {badgePembayaran(visit.status_pembayaran)}"
+                >{STATUS_PEMBAYARAN[visit.status_pembayaran] ||
+                  "Belum Bayar"}</span
+              >
             </div>
             <div class="flex items-center justify-between">
               <span class="text-sm text-gray-600">Pemeriksaan</span>
-              <span class="badge {badgePeriksa(visit.status_periksa)}">{STATUS_PERIKSA[visit.status_periksa] || 'Belum Diperiksa'}</span>
+              <span class="badge {badgePeriksa(visit.status_periksa)}"
+                >{STATUS_PERIKSA[visit.status_periksa] ||
+                  "Belum Diperiksa"}</span
+              >
             </div>
             <div class="flex items-center justify-between">
               <span class="text-sm text-gray-600">Status Keluar</span>
-              <span class="badge {badgeKeluar(visit.status_keluar)}">{STATUS_KELUAR[visit.status_keluar] || 'Masih di RS'}</span>
+              <span class="badge {badgeKeluar(visit.status_keluar)}"
+                >{STATUS_KELUAR[visit.status_keluar] || "Masih di RS"}</span
+              >
             </div>
           </div>
         </div>

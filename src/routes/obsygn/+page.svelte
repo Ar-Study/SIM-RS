@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate } from '$lib/utils/helpers.js';
+  import { formatDate, withBasePath } from '$lib/utils/helpers.js';
 
   let loading = $state(true);
   let activeTab = $state('pasien');
@@ -348,7 +348,7 @@
                   </td>
                   <td class="table-cell text-gray-600 hidden lg:table-cell">{p.doctor_name}</td>
                   <td class="table-cell text-right">
-                    <a href="/rawat-jalan/{p.visit_id}" class="btn-primary btn-sm text-xs">Detail</a>
+                    <a href={withBasePath(`/rawat-jalan/${p.visit_id}`)} class="btn-primary btn-sm text-xs">Detail</a>
                   </td>
                 </tr>
               {/each}

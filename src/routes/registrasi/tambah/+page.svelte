@@ -358,7 +358,7 @@
 <div class="max-w-4xl mx-auto space-y-6">
   <!-- Header -->
   <div class="flex items-center gap-4">
-    <a href="/registrasi" class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors">
+    <a href={withBasePath('/registrasi')} class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors">
       <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
       </svg>

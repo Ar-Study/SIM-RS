@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatCurrency, formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatCurrency, formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { DRUG_CATEGORIES } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -420,7 +420,7 @@
                       <td class="table-cell text-right">
                         {#if rx.status === 'pending'}
                           <a
-                            href="/farmasi/resep/{rx.visit_id || rx.id}"
+                            href={withBasePath(`/farmasi/resep/${rx.visit_id || rx.id}`)}
                             class="btn-success btn-sm text-xs"
                           >
                             <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -577,7 +577,7 @@
         <div class="space-y-4">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-semibold text-gray-900">Penjualan Obat Bebas</h3>
-            <a href="/farmasi/penjualan" class="btn-primary btn-sm">
+            <a href={withBasePath('/farmasi/penjualan')} class="btn-primary btn-sm">
               <svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
@@ -627,7 +627,7 @@
                       </td>
                       <td class="table-cell text-right font-semibold text-gray-900">{formatCurrency(sale.total)}</td>
                       <td class="table-cell text-right">
-                        <a href="/farmasi/penjualan?id={sale.id}" class="text-gray-400 hover:text-primary-600 transition-colors" title="Detail">
+                        <a href={withBasePath(`/farmasi/penjualan?id=${sale.id}`)} class="text-gray-400 hover:text-primary-600 transition-colors" title="Detail">
                           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />

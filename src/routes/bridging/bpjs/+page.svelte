@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDate, formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDate, formatDateTime, withBasePath } from '$lib/utils/helpers.js';
   import { PAYOR_TYPES } from '$lib/utils/constants.js';
 
   let loading = $state(true);
@@ -516,7 +516,7 @@
                       <td class="table-cell text-right">
                         {#if item.status_keluar !== '1'}
                           <a
-                            href="/rawat-jalan/{item.visit_id}"
+                            href={withBasePath(`/rawat-jalan/${item.visit_id}`)}
                             class="text-primary-600 hover:text-primary-700 transition-colors"
                             title="Buka Kunjungan"
                           >

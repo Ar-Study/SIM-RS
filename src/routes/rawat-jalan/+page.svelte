@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase.js';
-  import { formatDateTime } from '$lib/utils/helpers.js';
+  import { formatDateTime, withBasePath } from '$lib/utils/helpers.js';
 
   let loading = $state(true);
   let visits = $state([]);
@@ -233,7 +233,7 @@
         </svg>
         Refresh
       </button>
-      <a href="/rawat-inap/admit" class="btn-primary btn-sm inline-flex items-center gap-1.5">
+      <a href={withBasePath('/rawat-inap/admit')} class="btn-primary btn-sm inline-flex items-center gap-1.5">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
@@ -354,7 +354,7 @@
                         </a>
                         {#if !visit.room_id}
                           <a
-                            href="/rawat-inap/admit?visit_id={visit.visit_id}"
+                            href={withBasePath(`/rawat-inap/admit?visit_id=${visit.visit_id}`)}
                             class="btn-secondary btn-sm text-xs inline-flex items-center gap-1 text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200"
                             title="Admit ke Rawat Inap"
                           >

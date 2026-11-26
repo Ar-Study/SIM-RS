@@ -182,7 +182,7 @@
         </svg>
         Refresh
       </button>
-      <a href="/registrasi/tambah" class="btn-danger btn-sm inline-flex items-center gap-2">
+      <a href={withBasePath('/registrasi/tambah')} class="btn-danger btn-sm inline-flex items-center gap-2">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
@@ -368,7 +368,7 @@
                         Periksa
                       </button>
                       <a
-                        href="/rawat-inap/admit?visit_id={visit.visit_id}"
+                        href={withBasePath(`/rawat-inap/admit?visit_id=${visit.visit_id}`)}
                         class="btn-secondary btn-sm text-xs inline-flex items-center gap-1 text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-200"
                         title="Admit ke Rawat Inap"
                       >

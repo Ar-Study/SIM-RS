@@ -26,6 +26,12 @@
   let rooms = $state([]);
   let beds = $state([]);
   let drugs = $state([]);
+  let drugTotalCount = $state(0);
+  let drugPage = $state(1);
+  let drugCategoryFilter = $state('ALL');
+  const DRUG_PAGE_SIZE = 50;
+  let drugLoading = $state(false);
+  let drugSearchTimer;
   let tariffs = $state([]);
   let tariffTotalCount = $state(0);
   let tariffPage = $state(1);
@@ -106,15 +112,51 @@
       : beds
   );
 
-  const filteredDrugs = $derived(
-    searchQuery
-      ? drugs.filter(d =>
-          d.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.drug_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.category?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : drugs
-  );
+  const filteredDrugs = $derived(drugs);
+  const totalDrugPages = $derived(Math.max(1, Math.ceil(drugTotalCount / DRUG_PAGE_SIZE)));
+
+  async function fetchDrugsPage(page = 1, query = '', category = drugCategoryFilter) {
+    drugLoading = true;
+    try {
+      const from = (page - 1) * DRUG_PAGE_SIZE;
+      const to = from + DRUG_PAGE_SIZE - 1;
+      let req = supabase
+        .from('drugs')
+        .select('drug_id, code, name, category, unit, buy_price, sell_price, stock, min_stock, expiry_date, manufacturer, batch_no, is_active', { count: 'exact' })
+        .order('name', { ascending: true })
+        .range(from, to);
+
+      if (category && category !== 'ALL') {
+        req = req.eq('category', category);
+      }
+
+      const q = query.trim();
+      if (q) {
+        req = req.or(`name.ilike.%${q}%,code.ilike.%${q}%,drug_id.ilike.%${q}%,batch_no.ilike.%${q}%`);
+      }
+
+      const { data, count, error } = await req;
+      if (error) throw error;
+      drugs = data || [];
+      drugTotalCount = count ?? drugs.length;
+      drugPage = page;
+    } catch (err) {
+      console.error('Fetch drugs error:', err);
+    } finally {
+      drugLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (activeTab === 'obat') {
+      const q = searchQuery;
+      const cat = drugCategoryFilter;
+      clearTimeout(drugSearchTimer);
+      drugSearchTimer = setTimeout(() => {
+        fetchDrugsPage(1, q, cat);
+      }, 250);
+    }
+  });
 
   const filteredTariffs = $derived(tariffs);
   const totalTariffPages = $derived(Math.max(1, Math.ceil(tariffTotalCount / TARIFF_PAGE_SIZE)));
@@ -344,13 +386,8 @@
         );
       }
 
-      // 6. Fetch data Obat
-      const drugRes = await supabase.from('drugs').select('*');
-      if (drugRes.data) {
-        drugs = [...drugRes.data].sort((a, b) => 
-          (a.name || '').toString().localeCompare((b.name || '').toString(), 'id')
-        );
-      }
+      // 6. Fetch data Obat (halaman pertama, server-side pagination untuk 1.597+ obat)
+      await fetchDrugsPage(1, '', 'ALL');
 
       // 7. Fetch data Tarif (halaman pertama, server-side pagination untuk 10.000+ tarif)
       await fetchTariffsPage(1, '', 'ALL', 'ALL');
@@ -1766,6 +1803,19 @@
 
           <!-- ===================== OBAT TAB ===================== -->
         {:else if activeTab === "obat"}
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2 text-sm">
+              <span class="text-gray-500 text-xs font-medium">Filter Kategori:</span>
+              <select class="select-field text-xs py-1.5 w-auto" bind:value={drugCategoryFilter}>
+                <option value="ALL">Semua Kategori</option>
+                <option value="Obat">Obat</option>
+                <option value="BMHP">BMHP</option>
+                <option value="Lab">Lab</option>
+                <option value="Lainnya">Lainnya</option>
+              </select>
+            </div>
+            <span class="text-xs text-gray-400">Total: {drugTotalCount.toLocaleString("id-ID")} obat</span>
+          </div>
           <div class="overflow-x-auto">
             <table class="w-full min-w-[720px]">
               <thead>
@@ -1901,9 +1951,34 @@
               </tbody>
             </table>
           </div>
-          <p class="text-xs text-gray-400 mt-3">
-            Menampilkan {filteredDrugs.length} dari {drugs.length} obat
-          </p>
+          <div class="flex items-center justify-between mt-3 text-xs text-gray-500">
+            <span>
+              {#if drugLoading}
+                Memuat data obat...
+              {:else}
+                Menampilkan {drugTotalCount === 0 ? 0 : (drugPage - 1) * DRUG_PAGE_SIZE + 1}–{Math.min(drugPage * DRUG_PAGE_SIZE, drugTotalCount)} dari {drugTotalCount.toLocaleString("id-ID")} obat
+              {/if}
+            </span>
+            {#if totalDrugPages > 1}
+              <div class="flex items-center gap-2">
+                <button
+                  class="btn-secondary btn-sm text-xs"
+                  disabled={drugPage <= 1 || drugLoading}
+                  onclick={() => fetchDrugsPage(drugPage - 1, searchQuery, drugCategoryFilter)}
+                >
+                  Sebelumnya
+                </button>
+                <span class="font-medium text-gray-700">Hal {drugPage} / {totalDrugPages}</span>
+                <button
+                  class="btn-secondary btn-sm text-xs"
+                  disabled={drugPage >= totalDrugPages || drugLoading}
+                  onclick={() => fetchDrugsPage(drugPage + 1, searchQuery, drugCategoryFilter)}
+                >
+                  Berikutnya
+                </button>
+              </div>
+            {/if}
+          </div>
 
           <!-- ===================== TARIF TAB ===================== -->
         {:else if activeTab === "tarif"}

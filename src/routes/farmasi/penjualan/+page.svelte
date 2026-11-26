@@ -94,13 +94,23 @@
 
   async function fetchDrugs() {
     try {
-      const { data, error } = await supabase
-        .from('drugs')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      if (error) throw error;
-      drugs = data || [];
+      const allDrugs = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('drugs')
+          .select('*')
+          .eq('is_active', true)
+          .order('name')
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allDrugs.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      drugs = allDrugs;
     } catch (err) {
       console.error('Fetch drugs error:', err);
     }
