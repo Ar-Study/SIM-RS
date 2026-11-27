@@ -235,7 +235,7 @@
                 </div>
                 <div>
                   <p class="font-semibold text-gray-900 text-sm">{baby.patient_name}</p>
-                  <p class="text-xs text-gray-400 font-mono">{baby.patient_no}</p>
+                  <p class="text-xs text-gray-400 font-mono">{baby.visit_id}</p>
                 </div>
               </div>
               <span class="badge {condition.class}">{condition.label}</span>

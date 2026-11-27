@@ -303,8 +303,7 @@
           <thead>
             <tr class="table-header">
               <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">#</th>
-              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">No.Reg</th>
-              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">No.RM</th>
+              <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">ID Kunjungan</th>
               <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nama Pasien</th>
               <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Poli</th>
               <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Dokter</th>
@@ -320,7 +319,6 @@
               <tr class="hover:bg-gray-50 transition-colors">
                 <td class="table-cell text-gray-400 font-mono text-xs">{(currentPage - 1) * perPage + i + 1}</td>
                 <td class="table-cell font-mono text-xs text-gray-900">{visit.visit_id}</td>
-                <td class="table-cell font-mono text-xs text-gray-500 hidden lg:table-cell">{visit.patient_no}</td>
                 <td class="table-cell font-medium text-gray-900">{visit.patient_name}</td>
                 <td class="table-cell text-gray-600 hidden md:table-cell">{visit.clinic_name}</td>
                 <td class="table-cell text-gray-600 hidden lg:table-cell">{visit.doctor_name}</td>

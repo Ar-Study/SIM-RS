@@ -370,7 +370,7 @@
                   <td class="table-cell">
                     <div>
                       <p class="font-medium text-gray-900">{visit.patient_name}</p>
-                      <p class="text-xs text-gray-400 font-mono">{visit.patient_no}</p>
+                      <p class="text-xs text-gray-400 font-mono">{visit.visit_id}</p>
                     </div>
                   </td>
                   <td class="table-cell text-gray-600 hidden md:table-cell">{visit.patient_age != null ? `${visit.patient_age} th` : '-'}</td>

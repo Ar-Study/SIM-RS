@@ -441,7 +441,7 @@
                 </div>
                 <div>
                   <p class="font-semibold text-gray-900">{labor.patient_name}</p>
-                  <p class="text-xs text-gray-400 font-mono">{labor.patient_no}</p>
+                  <p class="text-xs text-gray-400 font-mono">{labor.visit_id || '-'}</p>
                 </div>
               </div>
               <span class="badge {laborStatus.class}">{laborStatus.label}</span>
@@ -532,7 +532,7 @@
                   <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                   <td class="table-cell">
                     <p class="font-medium text-gray-900">{d.patient_name}</p>
-                    <p class="text-xs text-gray-400 font-mono">{d.patient_no}</p>
+                    <p class="text-xs text-gray-400 font-mono">{d.visit_id || '-'}</p>
                   </td>
                   <td class="table-cell text-gray-500 hidden md:table-cell font-mono text-xs">{formatDateTime(d.admission_time)}</td>
                   <td class="table-cell text-gray-600 hidden sm:table-cell">{d.gestational_age ?? '-'} mgg</td>

@@ -345,7 +345,7 @@
                 <div class="flex items-start justify-between gap-2 mb-2">
                   <div>
                     <h3 class="font-semibold text-gray-900">{visit.patient_name}</h3>
-                    <p class="text-sm text-gray-500">{visit.patient_no}</p>
+                    <p class="text-sm text-gray-500">{visit.visit_id}</p>
                   </div>
                   <span class="badge {visitStatus.class} shrink-0">{visitStatus.label}</span>
                 </div>
@@ -499,7 +499,7 @@
                   <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                   <td class="table-cell">
                     <p class="font-medium text-gray-900">{req.patient_name}</p>
-                    <p class="text-xs text-gray-400 font-mono">{req.patient_no}</p>
+                    <p class="text-xs text-gray-400 font-mono">{req.visit_id}</p>
                   </td>
                   <td class="table-cell text-gray-600 hidden md:table-cell">{req.procedure_name}</td>
                   <td class="table-cell hidden lg:table-cell">
@@ -555,7 +555,7 @@
                   <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                   <td class="table-cell">
                     <p class="font-medium text-gray-900">{r.patient_name}</p>
-                    <p class="text-xs text-gray-400 font-mono">{r.patient_no}</p>
+                    <p class="text-xs text-gray-400 font-mono">{r.visit_id}</p>
                   </td>
                   <td class="table-cell text-gray-600">{r.procedure_name}</td>
                   <td class="table-cell text-gray-600 hidden md:table-cell">{r.surgeon_name}</td>

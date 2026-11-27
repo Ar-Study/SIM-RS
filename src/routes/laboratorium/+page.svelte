@@ -436,7 +436,7 @@
                   <tr class="table-header">
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-10">#</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">No. Order</th>
-                    <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">No. RM</th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">ID Kunjungan</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nama Pasien</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Tgl Order</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase text-center">Jumlah Item</th>
@@ -455,7 +455,7 @@
                           {order.order_id || `LAB-${order.id}` || '-'}
                         </span>
                       </td>
-                      <td class="table-cell text-gray-600 font-mono text-xs hidden md:table-cell">{order.no_rm}</td>
+                      <td class="table-cell text-gray-600 font-mono text-xs hidden md:table-cell">{order.visit_id || '-'}</td>
                       <td class="table-cell">
                         <div>
                           <p class="font-medium text-gray-900">{order.patient_name}</p>
@@ -672,7 +672,7 @@
                   <tr class="table-header">
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-10">#</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">No. Order</th>
-                    <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">No. RM</th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">ID Kunjungan</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nama Pasien</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Dokter</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Tgl Selesai</th>
@@ -690,7 +690,7 @@
                           {order.order_id || `LAB-${order.id}` || '-'}
                         </span>
                       </td>
-                      <td class="table-cell text-gray-600 font-mono text-xs hidden md:table-cell">{order.no_rm}</td>
+                      <td class="table-cell text-gray-600 font-mono text-xs hidden md:table-cell">{order.visit_id || '-'}</td>
                       <td class="table-cell">
                         <div>
                           <p class="font-medium text-gray-900">{order.patient_name}</p>

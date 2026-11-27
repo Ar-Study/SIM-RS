@@ -445,7 +445,7 @@
                 <div class="flex items-start justify-between gap-2 mb-2">
                   <div>
                     <h3 class="font-semibold text-gray-900">{surg.procedure_name}</h3>
-                    <p class="text-sm text-gray-500">{surg.patient_name} &middot; {surg.patient_no}</p>
+                    <p class="text-sm text-gray-500">{surg.patient_name} &middot; {surg.visit_id}</p>
                   </div>
                   <span class="badge {statusCfg.class} shrink-0">{statusCfg.label}</span>
                 </div>
@@ -517,7 +517,7 @@
                   <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                   <td class="table-cell">
                     <p class="font-medium text-gray-900">{s.patient_name}</p>
-                    <p class="text-xs text-gray-400 font-mono">{s.patient_no}</p>
+                    <p class="text-xs text-gray-400 font-mono">{s.visit_id}</p>
                   </td>
                   <td class="table-cell text-gray-600">{s.procedure_name}</td>
                   <td class="table-cell text-gray-600 hidden md:table-cell">{s.surgeon_name}</td>

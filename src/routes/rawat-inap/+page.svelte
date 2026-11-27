@@ -408,7 +408,7 @@
               <thead>
                 <tr class="table-header">
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-10">#</th>
-                  <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">No.RM</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">ID Kunjungan</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nama Pasien</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Kamar</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Kelas</th>
@@ -424,7 +424,7 @@
                     <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                     <td class="table-cell">
                       <span class="font-mono text-sm font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded">
-                        {ip.patient_no || '-'}
+                        {ip.visit_id || '-'}
                       </span>
                     </td>
                     <td class="table-cell">

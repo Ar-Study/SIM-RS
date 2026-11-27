@@ -364,7 +364,7 @@
                 <tr class="table-header">
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-10">#</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">No. Invoice</th>
-                  <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">No. RM</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">ID Kunjungan</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nama Pasien</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Poli</th>
                   <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Tipe Kunjungan</th>
@@ -384,7 +384,7 @@
                       </span>
                     </td>
                     <td class="table-cell">
-                      <span class="font-mono text-xs text-gray-600">{visit.patient_no}</span>
+                      <span class="font-mono text-xs text-gray-600">{visit.visit_id}</span>
                     </td>
                     <td class="table-cell">
                       <p class="font-medium text-gray-900">{visit.patient_name}</p>

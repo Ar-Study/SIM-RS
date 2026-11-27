@@ -351,7 +351,7 @@
               <tr class="table-header">
                 <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">#</th>
                 <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Pasien</th>
-                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">No. RM</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">ID Kunjungan</th>
                 <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Poli</th>
                 <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Jenis</th>
                 <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
@@ -362,7 +362,7 @@
                 <tr class="hover:bg-gray-50 transition-colors">
                   <td class="table-cell text-gray-400 font-mono text-xs">{i + 1}</td>
                   <td class="table-cell font-medium text-gray-900">{visit.patient_name}</td>
-                  <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">{visit.patient_no}</td>
+                  <td class="table-cell text-gray-500 hidden sm:table-cell font-mono text-xs">{visit.visit_id}</td>
                   <td class="table-cell text-gray-600 hidden md:table-cell">{visit.clinic_name}</td>
                   <td class="table-cell">
                     <span class="badge {getVisitTypeBadge(visit.visit_type)}">{getVisitTypeLabel(visit.visit_type)}</span>
